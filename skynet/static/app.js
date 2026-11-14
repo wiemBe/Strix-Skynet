@@ -686,7 +686,7 @@ async function viewScan(id) {
         h("td", { class: "shrink" }, icon("chevron")), detail));
       tbody.append(detail);
     });
-    tbody.querySelectorAll(".cell-clip").forEach((c) => { c.style.maxWidth = "min(900px, 60vw)"; });
+    tbody.querySelectorAll(".cell-clip").forEach((c) => { c.style.maxWidth = "min(880px, 44vw)"; });
     return h("div", {},
       r.source === "vulnerabilities/*.md" ? alertBox("info", "Ön bulgular", "Tarama sürerken Strix'in yazdığı tekil bulgu dosyalarından okunuyor. Nihai liste tarama bitince oluşur.") : null,
       h("div", { class: "table-card" }, h("div", { class: "table-scroll" }, h("table", { class: "t" },
