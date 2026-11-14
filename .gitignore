@@ -1,0 +1,10 @@
+# runtime data: database, encryption key, generated admin password, logs
+data/
+.env
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+# design source (resized copies live in skynet/static/)
+Angular S Sensor Emblem.png
+.claude/
