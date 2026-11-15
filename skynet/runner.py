@@ -27,9 +27,6 @@ _cancel_requested: set[int] = set()
 _lock = threading.RLock()
 _ingest_lock = threading.RLock()   # serializes findings/inventory ingest (finalize + backfill) for chronological order
 _wake = threading.Event()
-# Strix stops an agent after 500 turns by default. Skynet never ends a scan on budget, time or turns unless the
-# user sets a turn limit, so an unset limit is passed as this practically unlimited value.
-UNLIMITED_TURNS = 1_000_000
 RUN_DIR_RE = re.compile(r"run_dir=([^\s,)]+)")
 OUTPUT_RE = re.compile(r"strix_runs/([A-Za-z0-9._-]+)")
 
@@ -213,12 +210,6 @@ def _start(scan: dict[str, Any], settings: dict[str, str]) -> None:
             _fail(scan["id"], "A technical error occurred while preparing the scan.")
 
 
-def limit_args(scan: dict[str, Any]) -> list[str]:
-    """Stop conditions passed to Strix. There is never a cost limit (--max-budget is not passed, even for a value
-    stored by older versions) and no time limit; turns are unlimited unless the user set a limit."""
-    return [f"--max-turns={int(scan.get('max_turns') or UNLIMITED_TURNS)}"]
-
-
 def _launch(scan: dict[str, Any], settings: dict[str, str]) -> None:
     sid = scan["id"]
     bin_path = str(Path(settings.get("strix_bin") or "").expanduser())
@@ -266,7 +257,9 @@ def _launch(scan: dict[str, Any], settings: dict[str, str]) -> None:
         args.append(f"--instruction-file={instr_path}")
     if scan.get("scan_mode"):
         args.append(f"--scan-mode={scan['scan_mode']}")
-    args += limit_args(scan)
+    # No --max-budget: Skynet does not limit scan cost (a value stored by older versions is ignored).
+    if scan.get("max_turns"):
+        args.append(f"--max-turns={int(scan['max_turns'])}")
     if scan.get("fail_on"):
         args.append(f"--fail-on={scan['fail_on']}")
 

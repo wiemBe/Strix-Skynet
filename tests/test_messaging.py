@@ -280,13 +280,6 @@ class TestLauncherChoice(unittest.TestCase):
             else:
                 os.environ["SKYNET_STRIX_RUNTIME"] = old
 
-    def test_scans_never_stop_on_budget_time_or_default_turns(self):
-        self.assertEqual(runner.limit_args({}), [f"--max-turns={runner.UNLIMITED_TURNS}"])
-        self.assertEqual(runner.limit_args({"max_turns": None, "max_budget": 0.4}),   # legacy budget ignored
-                         [f"--max-turns={runner.UNLIMITED_TURNS}"])
-        self.assertEqual(runner.limit_args({"max_turns": 40}), ["--max-turns=40"])  # an explicit limit is kept
-        self.assertGreater(runner.UNLIMITED_TURNS, 500)                             # Strix's own default
-
     def test_messaging_is_opt_in(self):
         self.assertEqual(db.DEFAULT_SETTINGS["agent_messaging"], "0")
 

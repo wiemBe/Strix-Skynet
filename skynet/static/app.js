@@ -435,7 +435,7 @@ function scanOptions(profiles, init) {
   const f = {
     llm_profile_id: select(profiles.map((p) => [String(p.id), `${p.name} — ${p.provider_label}${p.is_default ? " (default)" : ""}`]), String(init.llm_profile_id || (def && def.id) || "")),
     scan_mode: select([["quick", "Quick — for CI checks"], ["standard", "Standard — routine testing"], ["deep", "Deep — thorough, long and costly"]], init.scan_mode || "standard"),
-    max_turns: h("input", { type: "number", min: "1", step: "1", value: init.max_turns ?? "", placeholder: "Unlimited" }),
+    max_turns: h("input", { type: "number", min: "1", step: "1", value: init.max_turns ?? "", placeholder: "Strix default" }),
     fail_on: select([["", "No gate"], ...SEV.map((s) => [s, `${SEV_TR[s]} and above`])], init.fail_on ?? "high"),
   };
   const llmHelp = h("div", { class: "help" });
@@ -1044,7 +1044,7 @@ async function viewScan(id) {
     return h("div", { class: "grid-2" },
       h("div", { class: "card card-pad" }, h("div", { class: "card-title" }, "Parameters"), h("dl", { class: "dl" },
         h("dt", {}, "Strix targets"), h("dd", { class: "mono" }, (scan.targets || []).map((t) => h("div", {}, t))),
-        h("dt", {}, "Turns per agent"), h("dd", {}, scan.max_turns || "Unlimited"),
+        h("dt", {}, "Turns per agent"), h("dd", {}, scan.max_turns || "Strix default (500)"),
         h("dt", {}, "Finding gate"), h("dd", {}, scan.fail_on ? `${SEV_TR[scan.fail_on]} and above` : "Not set"),
         h("dt", {}, "Resumed run"), h("dd", { class: scan.resume_run ? "mono" : "faint" }, scan.resume_run || "—"),
         h("dt", {}, "Strix exit code"), h("dd", {}, scan.exit_code ?? "—", scan.exit_code === 2 ? h("span", { class: "faint" }, " · findings found") : scan.exit_code === 1 ? h("span", { class: "faint" }, " · error or interruption") : null),
@@ -1482,7 +1482,7 @@ function verificationPanel(gid) {
       const [target, profiles, campaigns] = await Promise.all([api(`/api/targets/${g.target_id}`), api("/api/llm-profiles"), api("/api/campaigns")]);
       const connection = select(profiles.map((p) => [String(p.id), `${p.name} · ${p.model}`]), String(target.llm_profile_id || (profiles.find((p) => p.is_default) || profiles[0] || {}).id || ""));
       const extras = scanExtras(target.auth_profiles || [], campaigns, { auth_profile_ids: (target.auth_profiles || []).map((p) => p.id) });
-      const turns = h("input", { type: "number", min: "1", step: "1", placeholder: "Unlimited" });
+      const turns = h("input", { type: "number", min: "1", step: "1", placeholder: "Strix default" });
       let submitting = false;
       const close = dialog("Verification", [
         h("div", { class: "note" }, g.title, " · ", target.base_url),
