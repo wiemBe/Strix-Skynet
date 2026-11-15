@@ -127,11 +127,12 @@ def _fire(schedule_id: int) -> None:
     try:
         if not target:
             raise ValueError("hedef silinmiş")
-        sid = runner.enqueue(target, s, "schedule", schedule_id=schedule_id)
+        sid = runner.enqueue(target, s, "schedule", schedule_id=schedule_id,
+                             campaign_id=s.get("campaign_id"), auth_profile_ids=s.get("auth_profile_ids") or [])
         event(schedule_id, "started", "", sid)
     except runner.Busy as e:
         event(schedule_id, "skipped_busy", str(e))
-    except ValueError as e:
+    except ValueError as e:   # includes vault.AuthError: a deleted/unassigned profile pauses this run, not the schedule
         event(schedule_id, "error", str(e))
     finally:
         if s["kind"] == "once":
