@@ -22,14 +22,21 @@ ve bilinen gizli desenlere karşı maskelenir.
 
 ## Kurulum
 
-Gereksinimler: Python 3.10+, Docker (Strix sandbox'ı için çalışır durumda), Strix CLI (`~/.strix/bin/strix`).
+Gereksinimler: Python 3.10+ (Skynet), Python 3.12–3.14 (Strix), çalışır durumda Docker (Strix sandbox'ı).
+Strix motoru repoyla birlikte gelir (`vendor/strix/`, resmi `strix-agent` 1.7.0, Apache-2.0); ayrıca kurmak gerekmez.
 
 ```bash
+git clone https://github.com/wiemBe/Strix-Skynet.git && cd Strix-Skynet
 cp .env.example .env      # gerekirse düzenleyin
 ./run.sh                  # http://127.0.0.1:8787
 ```
 
-`run.sh` ilk çalıştırmada `.venv` oluşturur ve `requirements.txt` bağımlılıklarını kurar.
+`run.sh` ilk çalıştırmada `.venv` oluşturup `requirements.txt` bağımlılıklarını, ardından
+`scripts/setup_strix.sh` ile Strix'i `.strix-runtime/` içine kurar: wheel'in SHA-256'sı doğrulanır ve test edilmiş
+bağımlılık kilidi (`vendor/strix/requirements.lock`) kullanılır. Bağımlılıklar PyPI'dan indirilir; sandbox imajını
+Strix ilk taramada Docker ile çeker. Paketlenen wheel macOS/Apple silicon içindir; başka platformda Strix'i ayrıca
+kurup `SKYNET_STRIX_BIN` verin. Yeni kurulumda Settings'teki Strix yolu varsayılan olarak bu paketlenmiş motordur;
+var olan kurulumların ayarı değişmez. Yeniden kurmak için: `scripts/setup_strix.sh --force`.
 
 **Giriş:** `.env` içinde `SKYNET_PASSWORD` boşsa ilk açılışta rastgele bir şifre üretilir ve
 `data/admin_password.txt` dosyasına (0600) yazılır. Kullanıcı adı varsayılan olarak `admin`'dir. Şifre
@@ -52,7 +59,8 @@ Süreç düzeyindeki ayarlar `.env` / ortam değişkenleriyle verilir (tamamı i
 | `SKYNET_COOKIE_SECURE` | `0` | HTTPS arkasında `1` yapın |
 | `SKYNET_TIMEZONE` | `Europe/Istanbul` | Zamanlamaların varsayılan saat dilimi |
 | `SKYNET_DATA` | `./data` | SQLite veritabanı, süreç logları, geçici çalışma dosyaları |
-| `SKYNET_STRIX_BIN`, `SKYNET_STRIX_WORKDIR` | `~/.strix/bin/strix`, `~` | İlk açılış varsayılanları |
+| `SKYNET_STRIX_BIN`, `SKYNET_STRIX_WORKDIR` | `.strix-runtime/bin/strix` (yoksa `~/.strix/bin/strix`), `~` | İlk açılış varsayılanları |
+| `SKYNET_STRIX_PYTHON` | ilk bulunan python3.12/3.13/3.14 | Paketlenmiş Strix'in kurulacağı Python |
 
 Strix binary yolu, çalışma klasörü, eşzamanlı tarama limiti, Strix telemetrisi ve webhook adresi
 **Ayarlar** sayfasından yönetilir.
