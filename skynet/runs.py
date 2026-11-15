@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+from contextlib import closing
 import re
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -61,9 +63,9 @@ def run_meta(run_dir: Path) -> dict[str, Any]:
         "scan_mode": r.get("scan_mode"),
         "targets": targets,
         "instruction": r.get("user_instruction") or r.get("instruction") or "",
-        "cost": usage.get("cost") or 0.0,
-        "tokens": usage.get("total_tokens") or 0,
-        "requests": usage.get("requests") or 0,
+        "cost": usage.get("cost") if usage.get("cost") else None,
+        "tokens": usage.get("total_tokens"),
+        "requests": usage.get("requests"),
         "executive_summary": (r.get("scan_results") or {}).get("executive_summary"),
     }
 
@@ -129,13 +131,31 @@ def agents(run_dir: Path) -> dict[str, Any]:
     statuses = a.get("statuses") or {}
     names = a.get("names") or {}
     parents = a.get("parent_of") or {}
+    metadata = a.get("metadata") or {}
     lst = [
-        {"id": aid, "name": names.get(aid, aid), "status": st, "parent": parents.get(aid)}
+        {"id": aid, "name": names.get(aid, aid), "status": st, "parent": parents.get(aid),
+         "task": (metadata.get(aid) or {}).get("task"), "activities": []}
         for aid, st in statuses.items()
     ]
     counts: dict[str, int] = {}
     for x in lst:
         counts[x["status"]] = counts.get(x["status"], 0) + 1
+    path = run_dir / ".state" / "agents.db"
+    if path.is_file():
+        try:
+            with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)) as c:
+                rows = c.execute("SELECT session_id, message_data, created_at FROM ("
+                                 "SELECT session_id, message_data, created_at, id, ROW_NUMBER() OVER ("
+                                 "PARTITION BY session_id ORDER BY id DESC) AS rn FROM agent_messages "
+                                 "WHERE json_extract(message_data,'$.type')='function_call') WHERE rn<=5 ORDER BY id DESC").fetchall()
+            by_id = {x["id"]: x for x in lst}
+            for aid, raw, at in rows:
+                msg = json.loads(raw)
+                if aid in by_id:
+                    by_id[aid]["activities"].append({"tool": msg.get("name"), "at": at,
+                                                    "call_id": msg.get("call_id")})
+        except (sqlite3.Error, ValueError, TypeError):
+            pass  # agent states remain usable when the optional activity database is unavailable
     return {"agents": lst, "counts": counts}
 
 

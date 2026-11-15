@@ -11,8 +11,8 @@ document.getElementById("loginForm").addEventListener("submit", async (e) => {
     });
     if (r.ok) { location.href = "/"; return; }
     const d = await r.json().catch(() => ({}));
-    err.textContent = d.detail || `Giriş başarısız (HTTP ${r.status})`;
+    err.textContent = d.detail || `Sign-in failed (HTTP ${r.status})`;
   } catch {
-    err.textContent = "Sunucuya ulaşılamadı.";
+    err.textContent = "Could not reach the server.";
   }
 });

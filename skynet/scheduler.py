@@ -39,7 +39,7 @@ def _hm(s: dict[str, Any]) -> tuple[int, int]:
     hh, mm = (s.get("time_of_day") or "").split(":")
     h, m = int(hh), int(mm)
     if not (0 <= h < 24 and 0 <= m < 60):
-        raise ValueError("saat HH:MM biçiminde olmalı")
+        raise ValueError("time must use HH:MM format")
     return h, m
 
 
@@ -47,7 +47,7 @@ def build_trigger(s: dict[str, Any]):
     tz, kind = _tz(s), s.get("kind")
     if kind == "once":
         if not s.get("run_at"):
-            raise ValueError("tarih/saat gerekli")
+            raise ValueError("date and time are required")
         dt = datetime.fromisoformat(s["run_at"])
         return DateTrigger(run_date=dt if dt.tzinfo else dt.replace(tzinfo=tz), timezone=tz)
     if kind == "daily":
@@ -56,18 +56,18 @@ def build_trigger(s: dict[str, Any]):
     if kind == "weekly":
         days = [d for d in s.get("weekdays") or [] if d in WEEKDAYS]
         if not days:
-            raise ValueError("en az bir gün seçin")
+            raise ValueError("select at least one day")
         h, m = _hm(s)
         return CronTrigger(day_of_week=",".join(days), hour=h, minute=m, timezone=tz)
     if kind == "interval":
         hours = int(s.get("interval_hours") or 0)
         if hours < 1:
-            raise ValueError("aralık en az 1 saat olmalı")
+            raise ValueError("interval must be at least 1 hour")
         start = datetime.fromisoformat(s["run_at"]) if s.get("run_at") else datetime.now(tz)
         return IntervalTrigger(hours=hours, start_date=start if start.tzinfo else start.replace(tzinfo=tz), timezone=tz)
     if kind == "cron":
         return CronTrigger.from_crontab((s.get("cron_expr") or "").strip(), timezone=tz)
-    raise ValueError("geçersiz plan türü")
+    raise ValueError("invalid schedule type")
 
 
 def validate(s: dict[str, Any]) -> str | None:
@@ -75,11 +75,11 @@ def validate(s: dict[str, Any]) -> str | None:
         ZoneInfo(s.get("timezone") or TIMEZONE)
         trig = build_trigger(s)
     except (ValueError, KeyError, TypeError) as e:
-        return str(e) or "geçersiz plan"
+        return str(e) or "invalid schedule"
     if s.get("kind") == "once":
         nxt = trig.get_next_fire_time(None, datetime.now(_tz(s)))
         if not nxt or nxt < datetime.now(_tz(s)):
-            return "tek seferlik plan geçmiş bir zamana ayarlanamaz"
+            return "a one-time schedule cannot be set in the past"
     return None
 
 
@@ -97,15 +97,15 @@ def preview(s: dict[str, Any], n: int = 5) -> list[str]:
 
 def describe(s: dict[str, Any]) -> str:
     k = s.get("kind")
-    days_tr = dict(zip(WEEKDAYS, ("Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz")))
+    days_tr = dict(zip(WEEKDAYS, ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")))
     if k == "once":
-        return f"Tek sefer: {s.get('run_at', '').replace('T', ' ')[:16]}"
+        return f"Once: {s.get('run_at', '').replace('T', ' ')[:16]}"
     if k == "daily":
-        return f"Her gün {s.get('time_of_day')}"
+        return f"Every day {s.get('time_of_day')}"
     if k == "weekly":
-        return "Her hafta " + ", ".join(days_tr.get(d, d) for d in s.get("weekdays") or []) + f" {s.get('time_of_day')}"
+        return "Every week " + ", ".join(days_tr.get(d, d) for d in s.get("weekdays") or []) + f" {s.get('time_of_day')}"
     if k == "interval":
-        return f"Her {s.get('interval_hours')} saatte bir"
+        return f"Every {s.get('interval_hours')} hours"
     return f"Cron: {s.get('cron_expr')}"
 
 
@@ -126,12 +126,13 @@ def _fire(schedule_id: int) -> None:
     target = db.get("targets", s["target_id"])
     try:
         if not target:
-            raise ValueError("hedef silinmiş")
-        sid = runner.enqueue(target, s, "schedule", schedule_id=schedule_id)
+            raise ValueError("target was deleted")
+        sid = runner.enqueue(target, s, "schedule", schedule_id=schedule_id,
+                             campaign_id=s.get("campaign_id"), auth_profile_ids=s.get("auth_profile_ids") or [])
         event(schedule_id, "started", "", sid)
     except runner.Busy as e:
         event(schedule_id, "skipped_busy", str(e))
-    except ValueError as e:
+    except ValueError as e:   # includes vault.AuthError: a deleted/unassigned profile pauses this run, not the schedule
         event(schedule_id, "error", str(e))
     finally:
         if s["kind"] == "once":
@@ -151,8 +152,8 @@ def handle_missed() -> None:
     for s in db.q("SELECT * FROM schedules WHERE enabled=1 AND next_run_at IS NOT NULL"):
         due = datetime.fromisoformat(s["next_run_at"])
         if (now - due).total_seconds() > GRACE_SECONDS:
-            event(s["id"], "missed", f"Uygulama kapalıyken kaçırıldı (planlanan {due.strftime('%d.%m.%Y %H:%M')}); "
-                                     "geriye dönük çalıştırılmadı.")
+            event(s["id"], "missed", f"Missed while the application was down (scheduled {due.strftime('%d.%m.%Y %H:%M')}); "
+                                     "not started retroactively.")
             if s["kind"] == "once":
                 db.update("schedules", s["id"], {"enabled": 0, "next_run_at": None})
 

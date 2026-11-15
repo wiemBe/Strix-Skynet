@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -14,7 +15,8 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
-from . import auth, crypto, db, llm, runner, runs, scheduler, targets
+from . import (activity, auth, campaigns, control, crypto, db, findings_store, inventory, llm, runner, runs, scheduler, targets,
+               telemetry, vault, verify)
 from .config import COOKIE_SECURE, LOG_DIR, SESSION_HOURS, STATIC_DIR, TIMEZONE, USER_STRIX_CONFIG
 
 
@@ -50,6 +52,7 @@ async def lifespan(_: FastAPI):
     if n:
         log.info("imported %d existing Strix runs", n)
     runner.recover()
+    runner.start_backfill()   # ingest findings/inventory/telemetry for pre-existing runs, in the background
     import threading  # warm the slow `strix --version` cache so the first page load is fast
     threading.Thread(target=runner.strix_version, args=(db.get_settings()["strix_bin"],), daemon=True).start()
     runner.start_worker()
@@ -67,15 +70,15 @@ async def security(request: Request, call_next):
     path = request.url.path
     if path.startswith("/api/ci/"):
         if not auth.valid_api_token(request.headers.get("x-api-token", "")):
-            return JSONResponse({"detail": "Geçersiz API token"}, status_code=401)
+            return JSONResponse({"detail": "Invalid API token"}, status_code=401)
     elif path not in PUBLIC:
         if not auth.valid_session(request.cookies.get(auth.COOKIE)):
             if path.startswith("/api/"):
-                return JSONResponse({"detail": "Oturum gerekli"}, status_code=401)
+                return JSONResponse({"detail": "Sign-in required"}, status_code=401)
             return RedirectResponse("/login", status_code=302)
         # CSRF: state-changing API calls must come from our own JS (custom header + SameSite=Strict cookie).
         if request.method not in ("GET", "HEAD") and request.headers.get("x-requested-with") != "skynet":
-            return JSONResponse({"detail": "CSRF koruması: geçersiz istek"}, status_code=403)
+            return JSONResponse({"detail": "CSRF protection: invalid request"}, status_code=403)
     resp = await call_next(request)
     resp.headers["Content-Security-Policy"] = ("default-src 'self'; img-src 'self' data:; style-src 'self'; "
                                                "script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
@@ -97,9 +100,9 @@ def _num(body: dict[str, Any], k: str, typ):
     try:
         v = typ(v)
     except (TypeError, ValueError):
-        bad(f"Geçersiz sayı: {k}")
-    if v <= 0:
-        bad(f"{k} sıfırdan büyük olmalı")
+        bad(f"Invalid number: {k}")
+    if not math.isfinite(v) or v <= 0:
+        bad(f"{k} must be greater than zero")
     return v
 
 
@@ -112,14 +115,29 @@ def _lines(v: Any) -> list[str]:
 def _scan_opts(body: dict[str, Any], target: dict[str, Any] | None = None) -> dict[str, Any]:
     mode = body.get("scan_mode") or (target or {}).get("default_scan_mode") or db.get_settings()["default_scan_mode"]
     if mode not in SCAN_MODES:
-        bad("Geçersiz tarama modu")
+        bad("Invalid scan mode")
     fail_on = body.get("fail_on") or ""
     if fail_on and fail_on not in SEVERITIES:
-        bad("Geçersiz gate seviyesi")
+        bad("Invalid finding gate severity")
     pid = body.get("llm_profile_id") or (target or {}).get("llm_profile_id") or (llm.default_profile() or {}).get("id")
-    if not pid or not llm.get(int(pid)):
-        bad("LLM bağlantı profili seçin (Ayarlar > LLM bağlantıları).")
-    return {"scan_mode": mode, "fail_on": fail_on, "llm_profile_id": int(pid),
+    try:
+        pid = int(pid) if pid else None
+    except (TypeError, ValueError):
+        bad("Invalid LLM connection profile")
+    if not pid or not llm.get(pid):
+        bad("Select an LLM connection (Settings > LLM connections).")
+    cid = body.get("campaign_id") or None
+    if cid:
+        c = db.get("campaigns", int(cid)) or bad("Campaign not found")
+        if c.get("archived_at"):
+            bad("Scans cannot be added to an archived campaign")
+        cid = int(cid)
+    try:
+        aids = [int(x) for x in (body.get("auth_profile_ids") or [])]
+    except (TypeError, ValueError):
+        bad("Invalid authentication profile")
+    return {"scan_mode": mode, "fail_on": fail_on, "llm_profile_id": int(pid), "campaign_id": cid,
+            "auth_profile_ids": aids,
             "max_budget": _num(body, "max_budget", float), "max_turns": _num(body, "max_turns", int),
             "instruction": (body.get("instruction") or "").strip()}
 
@@ -127,17 +145,19 @@ def _scan_opts(body: dict[str, Any], target: dict[str, Any] | None = None) -> di
 def _scan_out(s: dict[str, Any] | None) -> dict[str, Any] | None:
     if not s:
         return None
+    red = vault.scan_redactor(s)
     s = dict(s)
     s.pop("pid", None)
-    return s
+    s.pop("redact_enc", None)
+    return red.obj(s, strict=True)
 
 
 def _scan_or_404(sid: int) -> dict[str, Any]:
-    return db.get_scan(sid) or bad("Tarama bulunamadı", 404)
+    return db.get_scan(sid) or bad("Scan not found", 404)
 
 
 def _target_or_404(tid: int) -> dict[str, Any]:
-    return db.get("targets", tid) or bad("Hedef bulunamadı", 404)
+    return db.get("targets", tid) or bad("Target not found", 404)
 
 
 def _run_dir(scan: dict[str, Any]) -> Path | None:
@@ -155,10 +175,10 @@ def login_page() -> FileResponse:
 def login(request: Request, body: dict[str, Any] = Body(...)) -> Response:
     ip = request.client.host if request.client else "?"
     if auth.throttled(ip):
-        bad("Çok fazla başarısız deneme. 5 dakika sonra tekrar deneyin.", 429)
+        bad("Too many failed attempts. Try again in 5 minutes.", 429)
     if not auth.check_credentials(str(body.get("username", "")), str(body.get("password", ""))):
         auth.record_failure(ip)
-        bad("Kullanıcı adı veya şifre hatalı.", 401)
+        bad("Incorrect username or password.", 401)
     auth.clear_failures(ip)
     resp = JSONResponse({"ok": True})
     resp.set_cookie(auth.COOKIE, auth.make_session(), max_age=SESSION_HOURS * 3600, httponly=True,
@@ -217,21 +237,21 @@ def overview() -> dict[str, Any]:
 
 # ---------------------------------------------------------------- LLM profiles
 def _llm_payload(body: dict[str, Any], existing: dict[str, Any] | None = None) -> dict[str, Any]:
-    name = (body.get("name") or "").strip() or bad("Profil adı zorunlu")
+    name = (body.get("name") or "").strip() or bad("Profile name is required")
     provider = body.get("provider")
     if provider not in llm.PROVIDERS:
-        bad("Sağlayıcı OpenRouter veya LiteLLM olmalı")
-    model = (body.get("model") or "").strip() or bad("Model zorunlu")
+        bad("Provider must be OpenRouter or LiteLLM")
+    model = (body.get("model") or "").strip() or bad("Model is required")
     base = (body.get("base_url") or "").strip()
     if provider == "litellm" and not base:
-        bad("LiteLLM için base URL zorunlu (örn. http://litellm.internal:4000)")
+        bad("LiteLLM requires a base URL (e.g. http://litellm.internal:4000)")
     if base and urlparse(base).scheme not in ("http", "https"):
-        bad("Base URL http(s) ile başlamalı")
+        bad("Base URL must start with http(s)")
     if body.get("api_type", "") not in llm.API_TYPES or body.get("reasoning_effort", "") not in llm.EFFORTS:
-        bad("Geçersiz API tipi veya reasoning effort")
+        bad("Invalid API type or reasoning effort")
     ca = (body.get("ca_cert_path") or "").strip()
     if ca and not Path(ca).expanduser().is_file():
-        bad(f"CA sertifika dosyası bulunamadı: {ca}")
+        bad(f"CA certificate file not found: {ca}")
     out = {"name": name, "provider": provider, "model": model, "base_url": base, "api_type": body.get("api_type", ""),
            "reasoning_effort": body.get("reasoning_effort", ""), "ca_cert_path": ca}
     key = body.get("api_key")
@@ -240,7 +260,7 @@ def _llm_payload(body: dict[str, Any], existing: dict[str, Any] | None = None) -
     elif body.get("clear_api_key"):
         out["api_key_enc"] = ""
     elif not existing and provider == "openrouter":
-        bad("OpenRouter için API anahtarı zorunlu")
+        bad("OpenRouter requires an API key")
     return out
 
 
@@ -258,7 +278,7 @@ def llm_list() -> list[dict[str, Any]]:
 def llm_create(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
     data = _llm_payload(body)
     if db.q1("SELECT id FROM llm_profiles WHERE name=?", (data["name"],)):
-        bad("Bu isimde bir profil var")
+        bad("A profile with this name already exists")
     pid = db.insert("llm_profiles", data)
     if body.get("is_default") or not llm.default_profile():
         llm.set_default(pid)
@@ -267,10 +287,10 @@ def llm_create(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
 
 @app.put("/api/llm-profiles/{pid}")
 def llm_update(pid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    existing = llm.get(pid) or bad("Profil bulunamadı", 404)
+    existing = llm.get(pid) or bad("Profile not found", 404)
     data = _llm_payload(body, existing)
     if db.q1("SELECT id FROM llm_profiles WHERE name=? AND id<>?", (data["name"], pid)):
-        bad("Bu isimde bir profil var")
+        bad("A profile with this name already exists")
     db.update("llm_profiles", pid, data)
     if body.get("is_default"):
         llm.set_default(pid)
@@ -279,18 +299,18 @@ def llm_update(pid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
 
 @app.post("/api/llm-profiles/{pid}/default")
 def llm_default(pid: int) -> dict[str, bool]:
-    llm.get(pid) or bad("Profil bulunamadı", 404)
+    llm.get(pid) or bad("Profile not found", 404)
     llm.set_default(pid)
     return {"ok": True}
 
 
 @app.delete("/api/llm-profiles/{pid}")
 def llm_delete(pid: int) -> dict[str, bool]:
-    p = llm.get(pid) or bad("Profil bulunamadı", 404)
+    p = llm.get(pid) or bad("Profile not found", 404)
     if db.q1("SELECT id FROM schedules WHERE llm_profile_id=? LIMIT 1", (pid,)):
-        bad("Bu profil zamanlamalarda kullanılıyor; önce o planlarda başka profil seçin.")
+        bad("This profile is used by schedules. Select another profile in those schedules first.")
     if any(s["llm_profile_id"] == pid for s in db.list_scans(status=",".join(runner.ACTIVE), limit=500)):
-        bad("Bu profille aktif tarama var")
+        bad("This profile has an active scan")
     db.execute("UPDATE targets SET llm_profile_id=NULL WHERE llm_profile_id=?", (pid,))
     db.delete("llm_profiles", pid)
     if p["is_default"] and (rest := llm.list_profiles()):
@@ -305,49 +325,41 @@ def llm_test(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
     p = {"provider": body.get("provider"), "base_url": body.get("base_url", ""), "model": body.get("model", ""),
          "ca_cert_path": body.get("ca_cert_path", "")}
     if p["provider"] not in llm.PROVIDERS:
-        bad("Sağlayıcı seçin")
+        bad("Select a provider")
     key = body.get("api_key") or (crypto.decrypt(stored.get("api_key_enc")) if stored else "")
     return llm.test(p, key_override=key)
 
 
 # ---------------------------------------------------------------- targets
 def _target_payload(body: dict[str, Any]) -> dict[str, Any]:
-    name = (body.get("name") or "").strip() or bad("Hedef adı zorunlu")
+    name = (body.get("name") or "").strip() or bad("Target name is required")
     env = body.get("environment")
     if env not in targets.ENVIRONMENTS:
-        bad("Ortam development, test, staging veya production olmalı")
-    base = (body.get("base_url") or "").strip() or bad("Hedef adresi zorunlu")
+        bad("Environment must be development, test, staging or production")
+    base = (body.get("base_url") or "").strip() or bad("Target address is required")
     extra = _lines(body.get("extra_targets"))
     for t in [base, *extra]:
         if t.startswith("-"):
-            bad(f"Geçersiz hedef: {t}")
-    auth_type = body.get("auth_type") or "none"
-    if auth_type not in targets.AUTH_TYPES:
-        bad("Geçersiz kimlik doğrulama türü")
+            bad(f"Invalid target: {t}")
     mode = body.get("default_scan_mode") or "standard"
     if mode not in SCAN_MODES:
-        bad("Geçersiz tarama modu")
+        bad("Invalid scan mode")
     lp = body.get("llm_profile_id") or None
     if lp and not llm.get(int(lp)):
-        bad("LLM profili bulunamadı")
-    out = {"name": name, "application": (body.get("application") or "").strip(), "environment": env,
-           "base_url": base, "extra_targets": extra, "in_scope": _lines(body.get("in_scope")),
-           "out_of_scope": _lines(body.get("out_of_scope")), "instruction": (body.get("instruction") or "").strip(),
-           "auth_type": auth_type, "auth_login_url": (body.get("auth_login_url") or "").strip(),
-           "auth_username": (body.get("auth_username") or "").strip(),
-           "auth_header_name": (body.get("auth_header_name") or "").strip(),
-           "auth_notes": (body.get("auth_notes") or "").strip(), "default_scan_mode": mode,
-           "llm_profile_id": int(lp) if lp else None}
-    if body.get("auth_secret"):
-        out["auth_secret_enc"] = crypto.encrypt(str(body["auth_secret"]))
-    if auth_type == "none":
-        out["auth_secret_enc"] = ""
-    return out
+        bad("LLM profile not found")
+    # Authentication is managed through auth profiles (vault), not stored on the target. New/updated targets always
+    # carry auth_type='none'; any auth_* fields in the request body are ignored.
+    return {"name": name, "application": (body.get("application") or "").strip(), "environment": env,
+            "base_url": base, "extra_targets": extra, "in_scope": _lines(body.get("in_scope")),
+            "out_of_scope": _lines(body.get("out_of_scope")), "instruction": (body.get("instruction") or "").strip(),
+            "auth_type": "none", "auth_secret_enc": "", "auth_login_url": "", "auth_username": "",
+            "auth_header_name": "", "auth_notes": "", "default_scan_mode": mode,
+            "llm_profile_id": int(lp) if lp else None}
 
 
 def _target_out(t: dict[str, Any], detail: bool = False) -> dict[str, Any]:
-    d = {k: v for k, v in t.items() if k != "auth_secret_enc"}
-    d["has_auth_secret"] = bool(t.get("auth_secret_enc"))
+    d = {k: v for k, v in t.items() if not k.startswith("auth_")}
+    d["auth_profiles"] = [vault.public(p, with_usage=False) for p in vault.profiles_for_target(t["id"])]
     last = db.list_scans(target_id=t["id"], limit=1)
     d["last_scan"] = _scan_out(last[0]) if last else None
     d["active_scan"] = _scan_out(runner.active_scan_for_target(t["id"]))
@@ -385,7 +397,7 @@ def target_update(tid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
 def target_delete(tid: int) -> dict[str, bool]:
     _target_or_404(tid)
     if runner.active_scan_for_target(tid):
-        bad("Hedefte aktif tarama var; önce iptal edin.")
+        bad("The target has an active scan. Cancel it first.")
     db.execute("DELETE FROM schedule_events WHERE schedule_id IN (SELECT id FROM schedules WHERE target_id=?)", (tid,))
     db.execute("DELETE FROM schedules WHERE target_id=?", (tid,))
     db.delete("targets", tid)  # scan history is kept and still shows the target name
@@ -398,10 +410,11 @@ def target_scan(tid: int, body: dict[str, Any] = Body(default={})) -> dict[str, 
     t = _target_or_404(tid)
     opts = _scan_opts(body, t)
     try:
-        sid = runner.enqueue(t, opts, "manual")
+        sid = runner.enqueue(t, opts, "manual", campaign_id=opts["campaign_id"],
+                             auth_profile_ids=opts["auth_profile_ids"])
     except runner.Busy as e:
         bad(str(e), 409)
-    except ValueError as e:
+    except ValueError as e:   # includes vault.AuthError
         bad(str(e))
     return _scan_out(db.get_scan(sid))  # type: ignore[return-value]
 
@@ -411,18 +424,24 @@ def _schedule_payload(body: dict[str, Any]) -> dict[str, Any]:
     t = _target_or_404(int(body.get("target_id") or 0))
     kind = body.get("kind")
     if kind not in scheduler.KINDS:
-        bad("Plan türü seçin")
+        bad("Select a schedule type")
     opts = _scan_opts(body, t)
+    # Auth profiles on a schedule must be assigned to its target (same rule as a scan); validate now.
+    try:
+        vault.resolve(t["id"], opts["auth_profile_ids"])
+    except vault.AuthError as e:
+        bad(str(e))
     data = {"target_id": t["id"], "name": (body.get("name") or "").strip(), "kind": kind,
             "run_at": (body.get("run_at") or "").strip(), "time_of_day": (body.get("time_of_day") or "").strip(),
             "weekdays": [d for d in body.get("weekdays") or [] if d in scheduler.WEEKDAYS],
             "interval_hours": _num(body, "interval_hours", int), "cron_expr": (body.get("cron_expr") or "").strip(),
             "timezone": (body.get("timezone") or TIMEZONE).strip(), "enabled": 1 if body.get("enabled", True) else 0,
+            "campaign_id": opts["campaign_id"], "auth_profile_ids": opts["auth_profile_ids"],
             **{k: opts[k] for k in ("scan_mode", "fail_on", "llm_profile_id", "max_budget", "max_turns")}}
     _anchor_interval(data)
     err = scheduler.validate(data)
     if err:
-        bad(f"Geçersiz plan: {err}")
+        bad(f"Invalid schedule: {err}")
     return data
 
 
@@ -458,7 +477,7 @@ def schedule_list(target_id: int | None = None) -> list[dict[str, Any]]:
 
 @app.get("/api/schedules/{sid}")
 def schedule_get(sid: int) -> dict[str, Any]:
-    s = db.q1(SCHED_SELECT + " WHERE s.id=?", (sid,)) or bad("Plan bulunamadı", 404)
+    s = db.q1(SCHED_SELECT + " WHERE s.id=?", (sid,)) or bad("Schedule not found", 404)
     out = _schedule_out(s)
     out["events"] = db.q("SELECT * FROM schedule_events WHERE schedule_id=? ORDER BY id DESC LIMIT 50", (sid,))
     return out
@@ -473,7 +492,7 @@ def schedule_create(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
 
 @app.put("/api/schedules/{sid}")
 def schedule_update(sid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    db.get("schedules", sid) or bad("Plan bulunamadı", 404)
+    db.get("schedules", sid) or bad("Schedule not found", 404)
     db.update("schedules", sid, _schedule_payload(body))
     scheduler.sync()
     return schedule_get(sid)
@@ -481,7 +500,7 @@ def schedule_update(sid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any
 
 @app.post("/api/schedules/{sid}/pause")
 def schedule_pause(sid: int) -> dict[str, Any]:
-    db.get("schedules", sid) or bad("Plan bulunamadı", 404)
+    db.get("schedules", sid) or bad("Schedule not found", 404)
     db.update("schedules", sid, {"enabled": 0})
     scheduler.sync()
     return schedule_get(sid)
@@ -489,10 +508,10 @@ def schedule_pause(sid: int) -> dict[str, Any]:
 
 @app.post("/api/schedules/{sid}/resume")
 def schedule_resume(sid: int) -> dict[str, Any]:
-    s = db.get("schedules", sid) or bad("Plan bulunamadı", 404)
+    s = db.get("schedules", sid) or bad("Schedule not found", 404)
     err = scheduler.validate(s)
     if err:
-        bad(f"Plan etkinleştirilemez: {err}. Planı düzenleyin.")
+        bad(f"Schedule cannot be enabled: {err}. Edit the schedule.")
     db.update("schedules", sid, {"enabled": 1})
     scheduler.sync()
     return schedule_get(sid)
@@ -530,33 +549,41 @@ def scan_get(sid: int) -> dict[str, Any]:
     if rd:
         meta = runs.run_meta(rd)
         out["run_meta"] = {k: meta[k] for k in ("status", "start_time", "end_time", "tokens", "requests", "cost")}
-        out["executive_summary_html"] = md.render(meta["executive_summary"]) if meta.get("executive_summary") else ""
+        exec_sum = vault.scan_redactor(s).text(meta.get("executive_summary") or "", strict=True)
+        out["executive_summary_html"] = md.render(exec_sum) if exec_sum else ""
         if s["status"] in runner.ACTIVE:
             out["summary"] = runs.summarize(rd, s.get("fail_on"))
-    return out
+    return vault.scan_redactor(s).obj(out, strict=True)
 
 
 @app.post("/api/scans/{sid}/cancel")
 def scan_cancel(sid: int) -> dict[str, Any]:
     _scan_or_404(sid)
     if not runner.cancel(sid):
-        bad("Bu tarama iptal edilemez")
+        bad("This scan cannot be cancelled")
     return _scan_out(db.get_scan(sid))  # type: ignore[return-value]
 
 
 @app.post("/api/scans/{sid}/resume")
 def scan_resume(sid: int, body: dict[str, Any] = Body(default={})) -> dict[str, Any]:
     s = _scan_or_404(sid)
+    if s.get("trigger") == "verify":
+        bad("Use Re-verify in the finding details. New verification evidence must be collected in a separate run.")
     if s["status"] not in ("cancelled", "failed", "interrupted") or not s.get("run_name"):
-        bad("Yalnızca iptal edilmiş, başarısız veya yarıda kalmış ve çıktı klasörü olan taramalar devam ettirilebilir.")
+        bad("Only cancelled, failed or interrupted scans with an output folder can be resumed.")
     t = db.get("targets", s["target_id"]) if s.get("target_id") else None
     if not t:
-        bad("Devam ettirmek için tarama bir hedefe bağlı olmalı.")
-    base = {k: s.get(k) for k in ("scan_mode", "fail_on", "max_budget", "max_turns", "llm_profile_id")}
+        bad("The scan must be linked to a target to resume it.")
+    base = {k: s.get(k) for k in ("scan_mode", "fail_on", "max_budget", "max_turns", "llm_profile_id",
+                                  "campaign_id", "auth_profile_ids")}
+    opts = _scan_opts({**base, **body}, t)
     try:
-        new = runner.enqueue(t, _scan_opts({**base, **body}, t), "manual", resume_run=s["run_name"])
+        new = runner.enqueue(t, opts, "manual", resume_run=s["run_name"], campaign_id=opts["campaign_id"],
+                             auth_profile_ids=opts["auth_profile_ids"])
     except runner.Busy as e:
         bad(str(e), 409)
+    except ValueError as e:   # includes vault.AuthError (profile removed/unassigned since the original run)
+        bad(str(e))
     return _scan_out(db.get_scan(new))  # type: ignore[return-value]
 
 
@@ -564,7 +591,10 @@ def scan_resume(sid: int, body: dict[str, Any] = Body(default={})) -> dict[str, 
 def scan_delete(sid: int) -> dict[str, bool]:
     s = _scan_or_404(sid)
     if s["status"] in runner.ACTIVE:
-        bad("Aktif tarama silinemez")
+        bad("An active scan cannot be deleted")
+    if db.q1("SELECT id FROM finding_verifications WHERE scan_id=?", (sid,)):
+        bad("This scan cannot be deleted because it preserves verification evidence links.")
+    db.execute("DELETE FROM agent_messages WHERE scan_id=?", (sid,))
     db.delete("scans", sid)  # strix_runs directory on disk is kept
     return {"ok": True}
 
@@ -575,12 +605,17 @@ FINDING_MD = ("description", "impact", "technical_analysis", "poc_description", 
 
 @app.get("/api/scans/{sid}/findings")
 def scan_findings(sid: int) -> dict[str, Any]:
-    rd = _run_dir(_scan_or_404(sid))
+    s = _scan_or_404(sid)
+    rd = _run_dir(s)
     if not rd:
         return {"source": None, "items": []}
+    red = vault.scan_redactor(s)
     items = []
     for v in runs.findings(rd):
-        v = dict(v)
+        v = red.obj(dict(v), strict=True)
+        occ = db.q1("SELECT group_id FROM finding_occurrences WHERE run_name=? AND strix_id=?",
+                     (s.get("run_name"), str(v.get("id"))))
+        v["group_id"] = occ["group_id"] if occ else None
         for f in FINDING_MD:
             if isinstance(v.get(f), str) and v[f].strip():
                 v[f + "_html"] = md.render(v[f])
@@ -593,17 +628,80 @@ def scan_findings(sid: int) -> dict[str, Any]:
 
 @app.get("/api/scans/{sid}/report")
 def scan_report(sid: int) -> dict[str, Any]:
-    rd = _run_dir(_scan_or_404(sid))
+    s = _scan_or_404(sid)
+    rd = _run_dir(s)
     p = rd / runs.DOWNLOADABLE["report"] if rd else None
     if not p or not p.exists():
         return {"available": False, "html": ""}
-    return {"available": True, "html": md.render(p.read_text(encoding="utf-8", errors="replace"))}
+    raw = vault.scan_redactor(s).text(p.read_text(encoding="utf-8", errors="replace"), strict=True)
+    return {"available": True, "html": md.render(raw)}
 
 
 @app.get("/api/scans/{sid}/agents")
 def scan_agents(sid: int) -> dict[str, Any]:
-    rd = _run_dir(_scan_or_404(sid))
-    return runs.agents(rd) if rd else {"agents": [], "counts": {}}
+    scan = _scan_or_404(sid)
+    rd = _run_dir(scan)
+    return vault.scan_redactor(scan).obj(runs.agents(rd), True) if rd else {"agents": [], "counts": {}}
+
+
+@app.get("/api/scans/{sid}/activity")
+def scan_activity(sid: int, after: int = -1, agent_id: str | None = None, limit: int = 60) -> dict[str, Any]:
+    scan = _scan_or_404(sid)
+    return activity.read(_run_dir(scan), vault.scan_redactor(scan), after, agent_id, limit)
+
+
+@app.get("/api/scans/{sid}/messages")
+def scan_messages(sid: int) -> dict[str, Any]:
+    scan = _scan_or_404(sid)
+    if scan.get("control_mode") == "bridge" and scan["status"] in runner.ACTIVE:
+        control.sync(scan)
+    out: dict[str, Any] = {**control.availability(scan), "agents": [], "budget_paused": False}
+    if out["available"]:
+        try:
+            live = control.agents(scan)
+            out["agents"] = [{k: a.get(k) for k in ("id", "name", "status", "accepting")} for a in live["agents"]]
+            out["budget_paused"] = bool(live.get("budget_paused"))
+        except (control.Unavailable, OSError, ValueError) as e:
+            out.update(available=False, reason=str(e) if isinstance(e, control.Unavailable)
+                       else "The scan's control endpoint did not answer.")
+    red = vault.scan_redactor(scan)
+    out["agents"] = red.obj(out["agents"], strict=True)
+    out["messages"] = control.history(scan, red)
+    return out
+
+
+@app.post("/api/scans/{sid}/messages")
+def scan_message_send(sid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    scan = _scan_or_404(sid)
+    agent_id = str(body.get("agent_id") or "")
+    name = next((a["name"] for a in (runs.agents(_run_dir(scan))["agents"] if _run_dir(scan) else [])
+                 if a.get("id") == agent_id), agent_id)
+    try:
+        row = control.send(scan, agent_id, str(name), str(body.get("content") or ""),
+                           str(body.get("request_id") or ""), user=auth.ADMIN_USER)
+    except FileExistsError as e:
+        bad(str(e), 409)
+    except control.Unavailable as e:
+        bad(str(e), 409)
+    except ValueError as e:
+        bad(str(e))
+    red = vault.scan_redactor(scan)
+    return control.out_row(db.get("agent_messages", row["id"]), red)
+
+
+@app.post("/api/scans/{sid}/messages/{mid}/recheck")
+def scan_message_recheck(sid: int, mid: int) -> dict[str, Any]:
+    scan = _scan_or_404(sid)
+    row = db.get("agent_messages", mid)
+    if not row or row["scan_id"] != sid:
+        bad("Message not found", 404)
+    try:
+        out = control.recheck(scan, row)
+    except control.Unavailable as e:
+        bad(str(e), 409)
+    except (FileExistsError, ValueError) as e:
+        bad(str(e))
+    return control.out_row(db.get("agent_messages", out["id"]), vault.scan_redactor(scan))
 
 
 @app.get("/api/scans/{sid}/log")
@@ -614,17 +712,27 @@ def scan_log(sid: int, source: str = "strix", offset: int = -1) -> dict[str, Any
     if not path or not path.exists():
         return {"available": False, "text": "", "offset": 0}
     text, off = runs.tail(path, offset)
-    return {"available": True, "text": text, "offset": off}
+    # Line-align so a secret spanning the chunk boundary is never served half-masked, then strict-redact.
+    if text and not text.endswith("\n"):
+        nl = text.rfind("\n")
+        if nl != -1:
+            off -= len(text.encode("utf-8")) - len(text[:nl + 1].encode("utf-8"))
+            text = text[:nl + 1]
+    return {"available": True, "text": vault.scan_redactor(s).text(text, strict=True), "offset": off}
 
 
 @app.get("/api/scans/{sid}/download/{kind}")
-def scan_download(sid: int, kind: str) -> FileResponse:
+def scan_download(sid: int, kind: str) -> Response:
     s = _scan_or_404(sid)
     rd = _run_dir(s)
     fname = runs.DOWNLOADABLE.get(kind)
     if not rd or not fname or not (rd / fname).exists():
-        bad("Dosya yok", 404)
-    return FileResponse(rd / fname, filename=f"{s.get('run_name') or sid}_{fname}", media_type="application/octet-stream")
+        bad("File not found", 404)
+    # Strix may have copied secrets into these files; redact before handing them out (strict for the log).
+    raw = (rd / fname).read_text(encoding="utf-8", errors="replace")
+    red = vault.scan_redactor(s).text(raw, strict=True)
+    return Response(red, media_type="application/octet-stream",
+                    headers={"Content-Disposition": f'attachment; filename="{s.get("run_name") or sid}_{fname}"'})
 
 
 @app.post("/api/import")
@@ -633,7 +741,8 @@ def import_runs() -> dict[str, int]:
 
 
 # ---------------------------------------------------------------- settings
-SETTINGS_KEYS = ("strix_bin", "strix_workdir", "max_concurrent", "default_scan_mode", "telemetry", "webhook_url")
+SETTINGS_KEYS = ("strix_bin", "strix_workdir", "max_concurrent", "default_scan_mode", "telemetry", "webhook_url",
+                 "agent_messaging")
 
 
 @app.get("/api/settings")
@@ -641,7 +750,10 @@ def settings_get() -> dict[str, Any]:
     st = db.get_settings()
     out: dict[str, Any] = {k: st.get(k, "") for k in SETTINGS_KEYS}
     out.update(timezone=TIMEZONE, password_from_env=auth.password_from_env(),
-               has_api_token=bool(st.get("api_token_enc")))
+               has_api_token=bool(st.get("api_token_enc")),
+               key_status=crypto.key_status(), schema_version=db.schema_version(),
+               migrations=db.migrations_applied(),
+               agent_messaging_status=control.bridge_status(st, runner.strix_version(st["strix_bin"]).get("version", "")))
     return out
 
 
@@ -652,18 +764,20 @@ def settings_put(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
         try:
             vals["max_concurrent"] = str(max(1, min(10, int(vals["max_concurrent"]))))
         except (TypeError, ValueError):
-            bad("Eşzamanlı tarama sayısı 1-10 arası olmalı")
+            bad("Concurrent scans must be between 1 and 10")
     if "strix_bin" in vals and not Path(str(vals["strix_bin"])).expanduser().is_file():
-        bad(f"Strix binary bulunamadı: {vals['strix_bin']}")
+        bad(f"Strix binary not found: {vals['strix_bin']}")
     if "strix_workdir" in vals and not Path(str(vals["strix_workdir"])).expanduser().is_dir():
-        bad(f"Çalışma klasörü yok: {vals['strix_workdir']}")
+        bad(f"Working folder not found: {vals['strix_workdir']}")
     if vals.get("default_scan_mode", "standard") not in SCAN_MODES:
-        bad("Geçersiz tarama modu")
+        bad("Invalid scan mode")
+    if "agent_messaging" in vals:
+        vals["agent_messaging"] = "1" if str(vals["agent_messaging"]).lower() in ("1", "true") else "0"
     if "telemetry" in vals:
         vals["telemetry"] = "1" if str(vals["telemetry"]).lower() in ("1", "true") else "0"
     url = str(vals.get("webhook_url") or "").strip()
     if url and urlparse(url).scheme not in ("http", "https"):
-        bad("Webhook URL http(s) olmalı")
+        bad("Webhook URL must use http(s)")
     db.set_settings(vals)
     if "strix_workdir" in vals:
         runner.import_existing_runs()
@@ -683,9 +797,12 @@ def ci_scan(tid: int, body: dict[str, Any] = Body(default={})) -> dict[str, Any]
     t = _target_or_404(tid)
     opts = _scan_opts(body, t)
     try:
-        sid = runner.enqueue(t, opts, "api")
+        sid = runner.enqueue(t, opts, "api", campaign_id=opts["campaign_id"],
+                             auth_profile_ids=opts["auth_profile_ids"])
     except runner.Busy as e:
         bad(str(e), 409)
+    except ValueError as e:   # includes vault.AuthError
+        bad(str(e))
     return {"scan_id": sid, "status": "queued"}
 
 
@@ -696,6 +813,256 @@ def ci_status(sid: int) -> dict[str, Any]:
     return {"scan_id": sid, "status": s["status"], "finished": s["status"] not in runner.ACTIVE,
             "gate": summ.get("gate") if s["status"] == "completed" else None,
             "counts": summ.get("counts"), "run_name": s.get("run_name")}
+
+
+# ---------------------------------------------------------------- campaigns
+def _campaign_or_404(cid: int) -> dict[str, Any]:
+    return db.get("campaigns", cid) or bad("Campaign not found", 404)
+
+
+@app.get("/api/campaigns")
+def campaign_list(include_archived: int = 0) -> list[dict[str, Any]]:
+    sql = "SELECT * FROM campaigns" + ("" if include_archived else " WHERE archived_at IS NULL")
+    return [campaigns.public(c) for c in db.q(sql + " ORDER BY archived_at IS NOT NULL, name COLLATE NOCASE")]
+
+
+@app.get("/api/campaigns/{cid}")
+def campaign_get(cid: int) -> dict[str, Any]:
+    c = _campaign_or_404(cid)
+    out = campaigns.public(c, detail=True)
+    out["scans"] = [_scan_out(s) for s in db.list_scans(limit=200) if s.get("campaign_id") == cid]
+    out["schedules"] = [_schedule_out(s) for s in db.q(SCHED_SELECT + " WHERE s.campaign_id=?", (cid,))]
+    return out
+
+
+@app.post("/api/campaigns")
+def campaign_create(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    try:
+        cid = campaigns.save(body, None)
+    except ValueError as e:
+        bad(str(e))
+    return campaign_get(cid)
+
+
+@app.put("/api/campaigns/{cid}")
+def campaign_update(cid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    c = _campaign_or_404(cid)
+    if c.get("archived_at"):
+        bad("Unarchive the campaign before editing it.")
+    try:
+        campaigns.save(body, c)
+    except ValueError as e:
+        bad(str(e))
+    return campaign_get(cid)
+
+
+@app.post("/api/campaigns/{cid}/archive")
+def campaign_archive(cid: int, body: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    _campaign_or_404(cid)
+    db.execute("UPDATE campaigns SET archived_at=? WHERE id=?",
+               (None if body.get("unarchive") else db.now_iso(), cid))
+    return campaign_get(cid)
+
+
+@app.delete("/api/campaigns/{cid}")
+def campaign_delete(cid: int) -> dict[str, bool]:
+    c = _campaign_or_404(cid)
+    err = campaigns.can_delete(c)
+    if err:
+        bad(err)
+    campaigns.delete(cid)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------- auth profiles (vault)
+def _auth_or_404(pid: int) -> dict[str, Any]:
+    return db.get("auth_profiles", pid) or bad("Authentication profile not found", 404)
+
+
+def _pause_schedules_using(pid: int, target_ids: list[int] | None, reason: str) -> int:
+    """Pause (and log an event on) every enabled schedule that relies on this profile, so a scheduled scan never
+    silently runs without the authentication it was configured with."""
+    n = 0
+    for s in vault.schedules_using(pid, target_ids):
+        if s.get("enabled"):
+            db.update("schedules", s["id"], {"enabled": 0})
+            scheduler.event(s["id"], "error", reason)
+            n += 1
+    if n:
+        scheduler.sync()
+    return n
+
+
+@app.get("/api/auth-profiles")
+def auth_list() -> list[dict[str, Any]]:
+    return [vault.public(p) for p in db.q("SELECT * FROM auth_profiles ORDER BY name COLLATE NOCASE")]
+
+
+@app.get("/api/auth-profiles/{pid}")
+def auth_get(pid: int) -> dict[str, Any]:
+    return vault.public(_auth_or_404(pid))
+
+
+@app.post("/api/auth-profiles")
+def auth_create(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    try:
+        pid = vault.save(body, None)
+    except (ValueError, crypto.DecryptError) as e:
+        bad(str(e))
+    if body.get("target_ids") is not None:
+        _assign_profile(pid, body.get("target_ids") or [])
+    return vault.public(vault.get(pid))  # type: ignore[arg-type]
+
+
+@app.put("/api/auth-profiles/{pid}")
+def auth_update(pid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    existing = _auth_or_404(pid)
+    try:
+        vault.save(body, existing)
+    except (ValueError, crypto.DecryptError) as e:
+        bad(str(e))
+    if body.get("target_ids") is not None:
+        _assign_profile(pid, body.get("target_ids") or [])
+    return vault.public(vault.get(pid))  # type: ignore[arg-type]
+
+
+def _assign_profile(pid: int, target_ids: list[int]) -> None:
+    want = {int(t) for t in target_ids}
+    valid = {t["id"] for t in db.q(f"SELECT id FROM targets WHERE id IN ({','.join('?' * len(want))})", list(want))} if want else set()
+    have = set(vault.assigned_targets(pid))
+    for tid in valid - have:
+        db.execute("INSERT OR IGNORE INTO auth_profile_targets(profile_id, target_id, added_at) VALUES (?,?,?)",
+                   (pid, tid, db.now_iso()))
+    removed = have - valid
+    for tid in removed:
+        db.execute("DELETE FROM auth_profile_targets WHERE profile_id=? AND target_id=?", (pid, tid))
+    if removed:
+        p = vault.get(pid)
+        _pause_schedules_using(pid, list(removed),
+                               f"“{p['name']}” authentication profile was unassigned from the target; schedule paused.")
+
+
+@app.post("/api/auth-profiles/{pid}/assign")
+def auth_assign(pid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    _auth_or_404(pid)
+    _assign_profile(pid, body.get("target_ids") or [])
+    return vault.public(vault.get(pid))  # type: ignore[arg-type]
+
+
+@app.post("/api/auth-profiles/{pid}/verify")
+def auth_verify(pid: int) -> dict[str, Any]:
+    p = _auth_or_404(pid)
+    r = vault.verify(p)
+    vault.record_verify(p, r)
+    return {"result": r, "profile": vault.public(vault.get(pid))}
+
+
+@app.delete("/api/auth-profiles/{pid}")
+def auth_delete(pid: int) -> dict[str, Any]:
+    p = _auth_or_404(pid)
+    paused = _pause_schedules_using(pid, None, f"“{p['name']}” authentication profile was deleted; schedule paused.")
+    db.execute("DELETE FROM auth_profile_targets WHERE profile_id=?", (pid,))
+    db.delete("auth_profiles", pid)
+    return {"ok": True, "paused_schedules": paused}
+
+
+# ---------------------------------------------------------------- inventory
+@app.get("/api/targets/{tid}/inventory")
+def target_inventory(tid: int, kind: str = "", tier: str = "", scope: str = "", q: str = "") -> dict[str, Any]:
+    t = _target_or_404(tid)
+    assets = inventory.assets_for(t, kind=kind, tier=tier, scope_label=scope, q=q)
+    latest = inventory.latest_run(tid)
+    return {"assets": assets, "summary": inventory.summary_for(tid),
+            "diff": inventory.run_diff(latest, tid) if latest else None, "latest_run": latest}
+
+
+@app.get("/api/assets/{aid}/observations")
+def asset_observations(aid: int) -> dict[str, Any]:
+    a = db.get("assets", aid) or bad("Asset not found", 404)
+    return {"asset": a, "observations": inventory.observations(aid)}
+
+
+# ---------------------------------------------------------------- telemetry
+@app.get("/api/scans/{sid}/telemetry")
+def scan_telemetry(sid: int) -> dict[str, Any]:
+    s = _scan_or_404(sid)
+    t = telemetry.get(sid)
+    if not t:
+        rd = _run_dir(s)
+        t = telemetry.collect(s, rd) if rd else {}
+    return {"available": bool(t and t.get("available")), "telemetry": t or {}}
+
+
+# ---------------------------------------------------------------- deduplicated findings
+def _finding_group_out(tid: int | None, scan_ids: list[int]) -> dict[str, Any]:
+    groups = findings_store.groups_for_scans(scan_ids)
+    return {"groups": [vault.finding_redactor(g["id"]).obj(g, True) for g in groups],
+            "summary": findings_store.summary(groups)}
+
+
+@app.get("/api/targets/{tid}/findings")
+def target_findings(tid: int) -> dict[str, Any]:
+    _target_or_404(tid)
+    scan_ids = [s["id"] for s in db.list_scans(target_id=tid, limit=5000)]
+    return _finding_group_out(tid, scan_ids)
+
+
+@app.get("/api/campaigns/{cid}/findings")
+def campaign_findings(cid: int) -> dict[str, Any]:
+    _campaign_or_404(cid)
+    return _finding_group_out(None, campaigns.scan_ids(cid))
+
+
+@app.get("/api/findings/{gid}")
+def finding_get(gid: int) -> dict[str, Any]:
+    g = db.q1(findings_store.GROUP_SELECT + " WHERE g.id=?", (gid,)) or bad("Finding not found", 404)
+    g["occurrences_list"] = findings_store.occurrences(gid)
+    g["verifications"] = verify.for_group(gid)
+    return vault.finding_redactor(gid).obj(g, True)
+
+
+@app.post("/api/findings/{gid}/verify")
+def finding_verify(gid: int, body: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+    """Start a focused Strix re-run that re-tests this one finding. The original finding is never modified; the
+    result is classified from the run's own evidence (see verify.py)."""
+    g = db.get("finding_groups", gid) or bad("Finding not found", 404)
+    t = db.get("targets", g["target_id"]) if g.get("target_id") else None
+    if not t:
+        bad("The finding must be linked to a target for verification.")
+    if verify.active_for_group(gid):
+        bad("This finding already has an active verification.", 409)
+    # Secrets come from the current Vault profile, not the old record. Default to the target's assigned profiles.
+    aids = body.get("auth_profile_ids")
+    if aids is None:
+        aids = [p["id"] for p in vault.profiles_for_target(t["id"])]
+    if not isinstance(aids, list):
+        bad("Authentication profiles must be a list.")
+    try:
+        profiles = vault.resolve(t["id"], [int(x) for x in aids])
+    except (TypeError, ValueError) as e:
+        bad(str(e))
+    instr = verify.build_instruction(g, verify.original_detail(g))
+    opts = _scan_opts({**body, "scan_mode": "quick", "fail_on": "", "instruction": instr}, t)
+    try:
+        sid = runner.enqueue(t, opts, "verify", auth_profile_ids=[p["id"] for p in profiles],
+                             verification_group_id=gid, campaign_id=opts["campaign_id"])
+    except runner.Busy as e:
+        bad(str(e), 409)
+    except ValueError as e:   # includes vault.AuthError
+        bad(str(e))
+    row = db.q1("SELECT * FROM finding_verifications WHERE scan_id=?", (sid,))
+    return {"verification": verify.public(row), "scan_id": sid}
+
+
+@app.patch("/api/findings/{gid}")
+def finding_patch(gid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    db.get("finding_groups", gid) or bad("Finding not found", 404)
+    rem = body.get("remediation")
+    if rem not in findings_store.REMEDIATION:
+        bad("Invalid status")
+    db.execute("UPDATE finding_groups SET remediation=?, remediation_note=?, remediation_at=? WHERE id=?",
+               (rem, (body.get("remediation_note") or "").strip(), db.now_iso(), gid))
+    return finding_get(gid)
 
 
 # ---------------------------------------------------------------- static UI

@@ -1,0 +1,127 @@
+{
+  "checks": [
+    {
+      "name": "overview",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "name": "targets",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "name": "campaigns",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "name": "scans",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "name": "schedules",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "name": "inventory",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "name": "vault",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "name": "settings",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "name": "overview",
+      "height": 1595,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "name": "overview",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "name": "targets",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "name": "campaigns",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "name": "scans",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "name": "schedules",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "name": "inventory",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "name": "vault",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "name": "settings",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "name": "live",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "name": "live",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "name": "live",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    }
+  ],
+  "pageErrors": [],
+  "horizontalOverflow": false,
+  "note": "Real historical local scan data; scan workers and scheduler disabled. No pentest was started."
+}

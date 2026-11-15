@@ -30,7 +30,7 @@ DATA_DIR = Path(os.environ.get("SKYNET_DATA") or PROJECT_DIR / "data").expanduse
 DB_PATH = DATA_DIR / "skynet.db"
 LOG_DIR = DATA_DIR / "logs"          # stdout/stderr of each strix process
 RUNTIME_DIR = DATA_DIR / "runtime"   # per-scan --config / instruction files (0600, removed after the run)
-SECRET_KEY_FILE = DATA_DIR / "secret.key"
+LEGACY_SECRET_KEY_FILE = DATA_DIR / "secret.key"   # pre-vault location (next to the database); migrated away on start
 ADMIN_PASSWORD_FILE = DATA_DIR / "admin_password.txt"
 
 HOST = os.environ.get("SKYNET_HOST", "127.0.0.1")
@@ -40,6 +40,11 @@ TIMEZONE = os.environ.get("SKYNET_TIMEZONE", "Europe/Istanbul")
 ADMIN_USER = os.environ.get("SKYNET_USER", "admin")
 ADMIN_PASSWORD = os.environ.get("SKYNET_PASSWORD", "")
 SECRET_KEY = os.environ.get("SKYNET_SECRET_KEY", "")
+# The encryption key is kept apart from application data so a copy of data/ (database backups, support
+# bundles) is not enough to decrypt stored secrets. Override with SKYNET_SECRET_KEY or SKYNET_SECRET_KEY_FILE.
+_xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+SECRET_KEY_FILE = Path(os.environ.get("SKYNET_SECRET_KEY_FILE") or Path(_xdg) / "skynet" / "secret.key").expanduser().resolve()
+SECRET_KEY_FILE_FROM_ENV = bool(os.environ.get("SKYNET_SECRET_KEY_FILE"))
 SESSION_HOURS = int(os.environ.get("SKYNET_SESSION_HOURS", "12"))
 COOKIE_SECURE = os.environ.get("SKYNET_COOKIE_SECURE", "0") == "1"
 

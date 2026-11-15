@@ -66,11 +66,11 @@ def check_credentials(user: str, pw: str) -> bool:
 
 def change_password(current: str, new: str) -> None:
     if ADMIN_PASSWORD:
-        raise ValueError("Şifre SKYNET_PASSWORD ortam değişkeninden geliyor; orada değiştirin.")
+        raise ValueError("The password comes from SKYNET_PASSWORD. Change it in the server configuration.")
     if not check_credentials(ADMIN_USER, current):
-        raise ValueError("Mevcut şifre yanlış.")
+        raise ValueError("Current password is incorrect.")
     if len(new) < 10:
-        raise ValueError("Yeni şifre en az 10 karakter olmalı.")
+        raise ValueError("New password must contain at least 10 characters.")
     db.set_settings({"admin_password_hash": _hash(new)})
     ADMIN_PASSWORD_FILE.unlink(missing_ok=True)
 
