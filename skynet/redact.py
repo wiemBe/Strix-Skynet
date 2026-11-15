@@ -16,12 +16,14 @@ from typing import Iterable
 from urllib.parse import quote, quote_plus
 
 MASK = "••••••"
-MIN_LEN = 4
+MIN_LEN = 1
 
 _LLM_KEY = re.compile(r"\b(sk-or-v1-[A-Za-z0-9]{16,}|sk-ant-[A-Za-z0-9_-]{16,}|sk-[A-Za-z0-9_-]{24,})")
 _AUTH_HDR = re.compile(r"(?im)\b((?:proxy-)?authorization|x-api-key|api-key|x-auth-token)(\s*[:=]\s*)(bearer\s+|basic\s+|token\s+)?([^\s\"',;]+)")
 _COOKIE_HDR = re.compile(r"(?im)\b(set-cookie|cookie)(\s*:\s*)([^\r\n]+)")
 _KV = re.compile(r"(?i)\b(password|passwd|pwd|secret|token|access_token|refresh_token|api_key|apikey|session|sid)(\"?\s*[:=]\s*\"?)([^\s\"'&,;}]{3,})")
+_SECRET_KEYS = {"password", "passwd", "pwd", "secret", "token", "accesstoken", "refreshtoken", "apikey",
+                "authorization", "proxyauthorization", "cookie", "setcookie", "session", "sid", "xauthtoken", "xapikey"}
 
 
 def variants(secret: str) -> set[str]:
@@ -65,7 +67,9 @@ class Redactor:
         if isinstance(o, list):
             return [self.obj(x, strict) for x in o]
         if isinstance(o, dict):
-            return {k: self.obj(v, strict) for k, v in o.items()}
+            return {k: (MASK if strict and re.sub(r"[-_]", "", str(k).lower()) in _SECRET_KEYS
+                        and isinstance(v, (str, list, dict)) and v
+                        else self.obj(v, strict)) for k, v in o.items()}
         return o
 
 

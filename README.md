@@ -1,17 +1,19 @@
 # Skynet
 
+Güncel çalışma ve doğrulama takibi: [PROGRESS.md](PROGRESS.md). Arayüz dili İngilizce, varsayılan saat dilimi Europe/Istanbul.
+
 Skynet, uygulamaları production'a çıkmadan önce ve sonrasında düzenli aralıklarla pentestten geçirmek için
 kullanılan web tabanlı yönetim arayüzüdür. Pentest motoru olarak makinede kurulu **[Strix](https://github.com/usestrix/strix)**
 CLI'ını kullanır; Strix'i yeniden yazmaz, yalnızca taramaları başlatır, izler, zamanlar ve sonuçlarını gösterir.
 
 - Hedef yönetimi: uygulama, adres, ortam (development / test / staging / production), kapsam içi/dışı
-- **Kampanyalar:** birden çok hedefi, taramayı ve zamanlamayı tek angajman altında toplama; tekilleştirilmiş bulgu özeti
+- **Kampanyalar:** birden çok hedefi, taramayı ve zamanlamayı tek angajman altında toplama; bulgu aday grupları özeti
 - **Kimlik profilleri (vault):** yeniden kullanılabilir kimlik doğrulama (anonim / kullanıcı+şifre / başlık / çerez); sırlar şifreli saklanır ve taramaya yalnızca sandbox dosyası olarak verilir, talimata yazılmaz
 - **Keşif envanteri:** taramalarda bulunan host, servis, uç nokta ve teknolojiler; kanıt düzeyi (gözlemlendi / ajan bildirdi), kapsam etiketi ve tarama arası değişim
 - **Tarama telemetrisi:** model çağrısı, yeniden deneme (oran limiti/zaman aşımı/bağlantı), gecikme, maliyet kaynağı, token ve ajan başına araç kullanımı
 - Anlık tarama, kuyruk, canlı log ve ajan durumu, güvenli durdurma (alt süreçler ve sandbox konteyneri dahil)
 - Zamanlama: tek seferlik, günlük, haftalık, saat aralıklı ve cron; duraklat / etkinleştir / düzenle / sil
-- Tarama geçmişi, tekilleştirilmiş bulgular (giderilme durumu), Strix raporları, SARIF/CSV/JSON/Markdown indirme
+- Tarama geçmişi, bulgu aday grupları (giderilme durumu), Strix raporları, SARIF/CSV/JSON/Markdown indirme
 - LLM bağlantı profilleri: OpenRouter ve kurum içi LiteLLM, kod değişikliği olmadan geçiş
 - Prod öncesi CI kullanımı için token korumalı API (bulgu eşiği: pass/fail)
 
@@ -31,7 +33,7 @@ cp .env.example .env      # gerekirse düzenleyin
 
 **Giriş:** `.env` içinde `SKYNET_PASSWORD` boşsa ilk açılışta rastgele bir şifre üretilir ve
 `data/admin_password.txt` dosyasına (0600) yazılır. Kullanıcı adı varsayılan olarak `admin`'dir. Şifre
-Ayarlar > Yönetici şifresi bölümünden değiştirilebilir.
+Settings > Admin password bölümünden değiştirilebilir.
 
 **İlk açılış:** `~/.strix/cli-config.json` içinde OpenRouter ayarı varsa otomatik olarak şifreli bir
 "OpenRouter" LLM profiline dönüştürülür. Daha önce Strix TUI ile yapılmış taramalar `strix_runs/` klasöründen
@@ -70,9 +72,9 @@ geçici bir `--config` dosyasıyla (0600, tarama bitince silinir) verilir:
 | Reasoning effort | `STRIX_REASONING_EFFORT` |
 | Özel CA | `SSL_CERT_FILE` |
 
-**Kurum içine geçiş:** Ayarlar > LLM bağlantıları > Bağlantı ekle → Sağlayıcı "LiteLLM", base URL
-`http://litellm.kurum.local:4000`, LiteLLM virtual key ve gateway'deki model adı → **Bağlantıyı test et**
-(model listesi gelir) → **Varsayılan yap**. Kod değişikliği gerekmez; OpenRouter profili kullanılabilir kalır.
+**Kurum içine geçiş:** Settings > LLM connections > Add connection → Sağlayıcı "LiteLLM", base URL
+`http://litellm.kurum.local:4000`, LiteLLM virtual key ve gateway'deki model adı → **Test connection**
+(model listesi gelir) → **Make default**. Kod değişikliği gerekmez; OpenRouter profili kullanılabilir kalır.
 
 Güvenlik kuralları:
 - API anahtarları veritabanında şifreli saklanır, tarayıcıya hiçbir zaman gönderilmez, loglara yazılmaz.
@@ -84,13 +86,13 @@ Güvenlik kuralları:
 ## Kampanyalar, kimlik profilleri, envanter ve telemetri
 
 - **Kampanyalar** yalnızca gruplamadır: hedefleri, taramaları ve zamanlamaları bir angajman altında toplar ve
-  tekilleştirilmiş bulgu özetini gösterir. Taramanın nasıl çalıştığını değiştirmez. Kampanya silme yalnızca arşivlenmiş
+  bulgu aday grupları özetini gösterir. Taramanın nasıl çalıştığını değiştirmez. Kampanya silme yalnızca arşivlenmiş
   kampanyada mümkündür ve sadece bağlantıları koparır; taramalar, bulgular ve zamanlamalar korunur.
 - **Kimlik profilleri** hedeflere atanır; bir tarama yalnızca atandığı profilleri kullanabilir. Profil silinir veya bir
   hedeften kaldırılırsa onu kullanan zamanlamalar otomatik duraklatılır ve bir olay kaydı yazılır (sessizce kimlik
   doğrulamasız çalışmaz). Sırlar türetilmiş bir anahtarla ayrıca şifrelenir; her taramaya başlarken kullanılan değerler
   şifreli bir anlık görüntü olarak saklanır, böylece profil sonradan değişse bile eski taramalardaki maskeleme bozulmaz.
-- **Bulgular** host + yöntem + normalize uç nokta + CWE parmak iziyle tekilleştirilir. Her görülme kendi taramasına bağlı
+- **Bulgular** host + yöntem + normalize uç nokta + CWE parmak iziyle aday gruplara ayrılır. Bu eşleşme tek başına aynı açık olduğunun kanıtı değildir. Her görülme kendi taramasına bağlı
   kalır (devam ettirilen tarama iki kez saymaz). Giderilme durumu (açık / giderildi / kabul edildi / hatalı pozitif) elle
   işaretlenir; "giderildi" bir bulgu sonraki taramada yine görülürse sessizce yeniden açılmaz, işaretlenir.
 - **Envanter** yalnızca Strix'in gerçekten kaydettiğinden oluşur: Caido proxy kayıtları ve bulgular "gözlemlendi",
@@ -133,7 +135,7 @@ konumu ve uygulanan taşımalar **Ayarlar** sayfasında görünür.
 
 ## CI / pipeline
 
-Ayarlar > CI / pipeline erişimi bölümünden token oluşturun (yalnızca bir kez gösterilir).
+Settings > CI / pipeline access bölümünden token oluşturun (yalnızca bir kez gösterilir).
 
 ```bash
 SCAN=$(curl -s -X POST -H "X-API-Token: $SKYNET_TOKEN" "$SKYNET_URL/api/ci/targets/<hedef_id>/scan" | jq -r .scan_id)
@@ -182,13 +184,91 @@ skynet/
   redact.py        Gizli değer ve desen maskeleme
   scope.py         URL/host normalizasyonu ve kapsam etiketleme
   runs.py          strix_runs/<run> klasörünü okuma (run.json, bulgular, ajanlar, log)
+  activity.py      Live activity: agents.db'den artımlı, maskeli ajan mesajı / araç akışı
+  verify.py        Bulgu doğrulama çalışmaları ve muhafazakâr kanıt sınıflandırması
+  control.py       Canlı ajana mesaj: başlatıcı seçimi, yerel kontrol ucu, şifreli denetim kaydı, durumlar
+  strix_bridge.py  Strix runtime'ında çalışan ince başlatıcı (resmi CLI + mesaj kanalı; yalnızca stdlib import)
   auth.py          Giriş, oturum çerezi, CI token
   crypto.py        Gizli değerlerin şifrelenmesi (anahtar veri klasörü dışında; vault alt anahtarı)
   db.py            SQLite şeması ve numaralı taşımalar
   static/          Bağımlılıksız arayüz (harici CDN yok; kurum içi ağda çalışır)
-tests/             Birim testleri (kapsam, parmak izi, maskeleme, telemetri, taşıma)
+tests/             Birim ve API testleri; tests/runtime/ Strix runtime'ında çalışan gerçek koordinatör kontrolleri
 ```
 
 Testler: `python -m unittest discover -s tests` (geçici bir veri klasörü kullanır; gerçek `data/` klasörüne dokunmaz).
 
 Yalnızca yetkili olduğunuz sistemleri tarayın.
+
+
+## Live activity ve bulgu doğrulama
+
+**Live activity** tarama detayında görünür ajan mesajlarını ve araç çağrısı/yanıtlarını mevcut
+`.state/agents.db` verisinden iki saniyede bir artımlı okur. Gerçek ajan hiyerarşisi sağdadır;
+ajan seçimi akışı filtreler. Araç çağrısı ve yanıtı tek açılır kartta birleşir. Auto-follow kapatıldığında
+okuma konumu korunur. Bağlantı kesilirse son kayıtlar görünmeye devam eder. Tamamlanmış taramalarda
+bu alan açıkça **Recorded session** olarak etiketlenir. Reasoning öğeleri, kullanıcı promptları,
+sağlayıcı metadatası ve ikili içerikler akışa alınmaz. Görünür metinler gönderilmeden önce maskelenir.
+
+Bulgu detayındaki **Verify / Re-verify**, mevcut runner/kuyruk/iptal mekanizmasıyla ayrı ve odaklı bir
+Strix çalışması oluşturur. LLM bağlantısı, güncel atanmış Vault profilleri, bütçe ve tur sınırı seçilebilir.
+`finding_verifications`, bulgu grubu ve taramayla bağlantıyı; sır içermeyen profil sürüm/karşılaştırma
+metadatasını; zamanları, sonucu ve kanıt referanslarını saklar. Kuyrukta profil yenilenirse başlangıçta
+güncel sürüm okunur. Eski tarama sırları yalnızca maskelemede kullanılır, kimlik doğrulamada kullanılmaz.
+
+- `reverified`: Bu çalıştırmaya ait saldırı/kontrol istekleri ve tam yanıtları, ilişkili Strix değerlendirmesi,
+  yeni bulgu, yeni PoC/kanıt ve bulgunun `http_exchange_ids` bağlantısı birlikte doğrulanır.
+- `not_reproduced`: İlgili testin tamamlandığı ve gereken oturum/erişimin test istekleri boyunca doğrulandığı
+  gösterilir. Başlık/çerez profillerinde güncel kimlik materyali eşleşmesi ve korumalı kimlik belirteci aranır.
+- `inconclusive`: Kanıt, tamamlanmış test, erişim veya oturum doğrulanamaz. Form-login sürekliliği mevcut
+  kayıtlarla kanıtlanamıyorsa bu sonuç kullanılır. İptal/kesinti de negatif sonuç değildir.
+- `error`: Çalışma teknik hatayla sonlanır.
+
+Parmak izi eşleşmesi, tek endpoint isteği, HTTP 200/redirect, temiz çıkış veya başarılı Skynet ön kontrolü
+tek başına yeterli değildir. Strix kanıt sözleşmesini tamamlamazsa değerlendirme `inconclusive` kalır.
+Orijinal bulgu dosyaları ve observation kayıtları korunur; hiçbir sonuç giderilme durumunu otomatik değiştirmez.
+Eski sınıflandırmalar önceki sonuç ve gerekçe korunarak yeniden değerlendirilebilir; tarama yeniden başlatılmaz.
+
+Migration 2 doğrulama tablosunu, migration 3 ayrı kanıt alanını ve sınıflandırma sürümünü ekler. Her bekleyen
+migration grubu öncesi SQLite backup API kullanılır; WAL verisi tutarlı yedeğe dahildir. Anahtar bulunamıyor
+ama şifreli kayıtlar varsa yeni anahtar üretilmez. Anahtar konumu, şema sürümü ve migration yedek yolları
+**Settings > Data protection** altında görünür.
+
+## Canlı ajana mesaj
+
+Çalışan bir taramada **Live activity** altındaki composer ile running/waiting durumdaki herhangi bir ajana
+talimat gönderilebilir. Ağaçtan ajan seçmek composer hedefini de değiştirir; yazılan taslak 2 sn'lik
+yenilemelerde silinmez.
+
+**Nasıl çalışır.** Strix headless (`--non-interactive`) modda kullanıcı mesajı kabul etmez: native
+`AgentCoordinator.send(from="user")` çalışan ajanı kesmeden `waiting` yapar, bütçe duraklatmasını açabilir ve
+gelen kutusu yalnızca `wait_for_agents` ile okunur. Bu yüzden Skynet taramayı ayrı Strix runtime'ı
+(`.strix-runtime/`, `strix-agent==1.7.0`) üzerinde `skynet/strix_bridge.py` ile başlatır. Köprü resmi Strix CLI
+giriş noktasını aynen çalıştırır ve sürüme sabitlenmiş iki genel parametreye bağlanır:
+`run_strix_scan(coordinator=...)` (ajan durumunu yalnızca okur) ve openai-agents
+`RunConfig.call_model_input_filter`. Ajanın bir sonraki model çağrısından önce o ajana sıralanmış mesajlar
+Strix oturumuna (agents.db) doğru sırada eklenir ve o çağrının girdisine konur. Ajan durumu, native mailbox
+ve ajanlar arası mesajlaşma değiştirilmez. Mesaj başlığı, sistem promptundaki kapsam kurallarının geçerli
+olduğunu ajana hatırlatır.
+
+**Durumlar** yalnızca gözlenebileni söyler: `Sending`, `Queued for next model call` (Strix kabul etti),
+`In agent context` (ajanın oturumuna ve model çağrısına eklendi), `Not delivered` (ajan veya tarama önce
+bitti), `Rejected` (ajan aktif değil, bütçe duraklatması, kapanış, kuyruk dolu), `Unconfirmed` (zaman aşımı;
+kabul edilmiş olabilir, otomatik yeniden gönderilmez). Ajanın talimatı uygulayıp uygulamadığı iddia edilmez;
+bu activity akışında görülür. Bütçe sınırında duraklatılmış tarama mesajla sürdürülmez, bütçe değiştirilmez.
+
+**Güvenlik.** Kontrol ucu yalnızca `127.0.0.1`, geçici port ve rastgele bearer token kullanır; Host başlığı
+denetlenir. Port/token 0600 manifest dosyasındadır (`data/runtime/scan_<id>_control.json`); Skynet PID, protokol,
+izinler ve sahipliği doğrular, yalnızca sabit host'a bağlanır ve yönlendirme izlemez. Süreç bitince manifest
+silinir; durum dosyası içerik taşımaz. Skynet API'si oturum + CSRF ister. Mesajlar Vault anahtarıyla şifreli
+`agent_messages` tablosunda saklanır, arayüzde taramanın maskeleme kurallarıyla gösterilir. `request_id`
+ile idempotent: aynı ID tekrar gönderilirse köprü yinelemeyi reddeder, farklı içerik `409` döner.
+Sırları mesaj yerine Vault profillerinde tutun.
+
+**Uygunluk.** Köprü yalnızca runtime sürümü yapılandırılmış Strix binary sürümüyle aynıysa kullanılır
+(motor sessizce başka sürüme geçmez). Değilse veya Settings'te kapalıysa tarama eskisi gibi binary ile başlar ve
+composer gerekçeyi gösterir. Köprü eklenemezse (desteklenmeyen sürüm) Strix yine çalışır, mesajlaşma
+kullanılamaz görünür. Runtime kurulumu: Python 3.12 ile `.strix-runtime` venv'i ve
+`pip install strix-agent==<binary sürümü>`. Migration 4 `agent_messages` tablosunu ve
+`scans.control_mode/control_note` alanlarını ekler (öncesinde yedek alınır).
+
+Bu geliştirme oturumunun test kapsamı ve canlı motor çalıştırması sınırları [PROGRESS.md](PROGRESS.md)'dedir.

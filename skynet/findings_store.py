@@ -121,6 +121,7 @@ def groups_for_scans(scan_ids: list[int]) -> list[dict[str, Any]]:
                f"WHERE scan_id IN ({ph}) GROUP BY group_id", scan_ids)
     by = {o["group_id"]: o for o in occ}
     for r in rows:
+        r["correlation"] = "fingerprint_candidate"
         o = by.get(r["id"]) or {}
         r["occurrences_here"] = o.get("n", 0)
         r["scan_ids_here"] = sorted(int(x) for x in str(o.get("scans") or "").split(",") if x)

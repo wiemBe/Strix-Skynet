@@ -1,3 +1,7 @@
+> **Claude için güncel devir:** [docs/CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md).
+> Güncel kod/test takibi: [PROGRESS.md](PROGRESS.md). Aşağıdaki metin eski oturumun tarihsel notudur;
+> eski “tamamlandı” ve “devam eden canlı tarama” ifadeleri güncel durum veya yeniden çalıştırma yetkisi değildir.
+
 # Skynet: 4 özellik geliştirmesi — devir notu (güncel: 2026-11-15)
 
 İstek: Pentest kampanyaları, Vault (kimlik profilleri), kalıcı keşif envanteri, tarama telemetrisi.

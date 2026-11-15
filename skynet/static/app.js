@@ -12,13 +12,13 @@ const app = $("#app");
 function h(tag, attrs, ...kids) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
-    if (v == null || v === false) continue;
+    if (v == null || (v === false && !k.startsWith("aria-"))) continue;
     if (k === "class") el.className = v;
     else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
     else if (k === "html") el.innerHTML = v; // server-rendered markdown (raw HTML disabled) only
     else if (k === "value") el.value = v;
     else if (k === "checked") el.checked = !!v;
-    else el.setAttribute(k, v === true ? "" : v);
+    else el.setAttribute(k, k.startsWith("aria-") && typeof v === "boolean" ? String(v) : v === true ? "" : v);
   }
   for (const kid of kids.flat(Infinity)) {
     if (kid == null || kid === false) continue;
@@ -122,26 +122,26 @@ function durationText(scan) {
   const hh = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = Math.floor(s % 60);
   return hh ? `${hh} h ${mm} m` : mm ? `${mm} m` : `${ss} s`;
 }
-const fmtTokens = (n) => !n ? "—" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(n);
+const fmtTokens = (n) => n == null ? "—" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "K" : String(n);
 const modelShort = (m) => m ? m.replace(/^(openrouter|openai)\//, "") : "—";
 
 const SEV = ["critical", "high", "medium", "low", "info"];
 const SEV_TR = { critical: "Critical", high: "High", medium: "Medium", low: "Low", info: "Info" };
 const STATUS_TR = { queued: "Queued", running: "Running", stopping: "Stopping", completed: "Completed",
   failed: "Failed", cancelled: "Cancelled", interrupted: "Interrupted" };
-const TRIGGER_TR = { manual: "Started manually", schedule: "Schedule", api: "CI / API", cli: "Strix TUI (imported)" };
+const TRIGGER_TR = { manual: "Started manually", schedule: "Scheduling", api: "CI / API", cli: "Strix TUI (imported)", verify: "Verification" };
 const MODE_TR = { quick: "Quick", standard: "Standard", deep: "Deep" };
-const OUTCOME_TR = { started: "Started", skipped_busy: "Skipped: target had an active scan", missed: "Missed: app was down", error: "Could not start" };
+const OUTCOME_TR = { started: "Started", skipped_busy: "Skipped: target had an active scan", missed: "Missed: app was down", error: "Couldn't start" };
 const KIND_TR = { once: "One-time", daily: "Daily", weekly: "Weekly", interval: "Hourly interval", cron: "Custom (cron)" };
 const DAYS = [["mon", "Mon"], ["tue", "Tue"], ["wed", "Wed"], ["thu", "Thu"], ["fri", "Fri"], ["sat", "Sat"], ["sun", "Sun"]];
 const ENV_TR = { development: "Development", test: "Test", staging: "Staging", production: "Production" };
-const CAMP_STATUS_TR = { planned: "Planned", active: "Active", on_hold: "On hold", completed: "Completed" };
+const CAMP_STATUS_TR = { planned: "Planned", active: "Active", on_hold: "Pending", completed: "Completed" };
 const KIND_ASSET_TR = { host: "Host", service: "Service", endpoint: "Endpoint", technology: "Technology" };
 const SCOPE_TR = { in: "In scope", out: "Out of scope", unknown: "Unknown" };
 const TIER_TR = { observed: "Observed", reported: "Agent-reported" };
 const REMEDIATION_TR = { open: "Open", fixed: "Fixed", accepted: "Accepted", false_positive: "False positive" };
 const AUTHKIND_TR = { anonymous: "Anonymous", credentials: "Username + password", header: "HTTP header", cookie: "Cookie" };
-const VERIFY_TR = { verified: "Verified", failed: "Failed", not_configured: "No URL set", not_verifiable: "Not verifiable",
+const VERIFY_TR = { verified: "Pre-check passed", failed: "Failed", not_configured: "No URL set", not_verifiable: "Not verifiable",
   not_applicable: "Not applicable", blocked: "Out of scope", not_checked: "Not checked" };
 
 // ================================================================== components
@@ -152,7 +152,7 @@ function button(label, { kind = "", ic, onclick, disabled, title, size, type = "
 function errorHeadline(err) {
   if (!err) return "";
   const lines = err.split("\n").map((l) => l.trim()).filter(Boolean);
-  return lines.find((l) => /^Error:/.test(l)) || lines.find((l) => /FAILED|Traceback|bulunamadı|çalışmıyor|silinmiş/.test(l)) || lines[lines.length > 1 ? 1 : 0];
+  return lines.find((l) => /^Error:/.test(l)) || lines.find((l) => /FAILED|Traceback|not found|unavailable|deleted/.test(l)) || lines[lines.length > 1 ? 1 : 0];
 }
 const statusChip = (s) => h("span", { class: `status ${s}` }, h("span", { class: "dot" }), STATUS_TR[s] || s);
 function statusCell(scan) {
@@ -231,7 +231,11 @@ function select(options, value) {
   if (value != null) s.value = String(value);
   return s;
 }
-const field = (label, input, help) => h("div", { class: "field" }, h("label", {}, label), input, help ? h("div", { class: "help" }, help) : null);
+let fieldId = 0;
+function field(label, input, help) {
+  if (!input.id) input.id = `field-${++fieldId}`;
+  return h("div", { class: "field" }, h("label", { for: input.id }, label), input, help ? h("div", { class: "help" }, help) : null);
+}
 const formSection = (title, desc, fields) => h("div", { class: "form-section" }, h("div", { class: "about" }, h("h3", {}, title), desc ? h("p", {}, desc) : null), h("div", { class: "fields" }, fields));
 
 // dialogs
@@ -280,7 +284,7 @@ async function refreshSystem() {
     if (!o.strix.ok) issues.push("Strix not found");
     if (!o.llm_default) issues.push("No LLM connection");
     box.replaceChildren(issues.length ? h("a", { class: "sys-alert", href: "#/settings", title: issues.join("\n") },
-      h("span", { class: "dot-bad" }), h("span", { class: "lbl" }, issues.length === 1 ? issues[0] : `${issues.length} system issues`)) : null);
+      h("span", { class: "dot-bad" }), h("span", { class: "lbl" }, issues.length === 1 ? issues[0] : `${issues.length} sistem sorunu`)) : null);
     $("#activeCount").textContent = o.active.length ? String(o.active.length) : "";
     return o;
   } catch (e) {
@@ -377,9 +381,9 @@ async function viewOverview() {
     o.schedule_problems.forEach((p) => problems.push([h("a", { href: `#/schedules/${p.id}` }, `${p.target_name} schedule`), ` · ${OUTCOME_TR[p.last_outcome] || p.last_outcome}`, h("span", { class: "faint" }, ` · ${p.last_note || fmtShort(p.event_at)}`)]));
 
     const parts = [];
-    parts.push(running.length ? `${running.length} scan(s) running` : "No scans running right now");
-    if (queued.length) parts.push(`${queued.length} scan(s) queued`);
-    parts.push(problems.length ? `${problems.length} item(s) need attention` : "nothing needs attention");
+    parts.push(running.length ? `${running.length} scans running` : "No scans running right now");
+    if (queued.length) parts.push(`${queued.length} scans queued`);
+    parts.push(problems.length ? `${problems.length} items need attention` : "nothing needs attention");
     const lead = parts.join(", ") + "." + (next ? ` Next scan ${fmtShort(next.next_run_at)} (${next.target_name}).` : "");
 
     box.replaceChildren(
@@ -418,7 +422,7 @@ function recentTable(list) {
   emptyState("No completed scans yet", "Results will appear here once the first scan finishes."));
 }
 function upcomingTable(list) {
-  return table([{ label: "Target" }, { label: "Schedule" }, { label: "When" }], list.map((u) => h("tr", { class: "clickable", onclick: () => go(`#/schedules/${u.id}`) },
+  return table([{ label: "Target" }, { label: "Scheduling" }, { label: "When" }], list.map((u) => h("tr", { class: "clickable", onclick: () => go(`#/schedules/${u.id}`) },
     h("td", {}, h("div", { class: "cell-clip" }, h("div", { class: "primary-line" }, u.target_name), h("div", { class: "secondary-line" }, envTag(u.environment)))),
     h("td", { class: "muted" }, u.describe),
     h("td", {}, whenCell(u.next_run_at)))),
@@ -438,7 +442,7 @@ function scanOptions(profiles, init) {
   const llmHelp = h("div", { class: "help" });
   const upd = () => {
     const p = profiles.find((x) => String(x.id) === f.llm_profile_id.value);
-    llmHelp.textContent = !p ? "" : (p.provider === "openrouter" ? `Model: ${p.strix_model}. Scan content goes to an external provider via OpenRouter.` : `Model: ${p.strix_model}. Content goes to an in-house gateway (${p.base_url}).`) + " On error it does not switch to another connection.";
+    llmHelp.textContent = !p ? "" : (p.provider === "openrouter" ? `Model: ${p.strix_model}. Scan content goes to the selected provider via OpenRouter.` : `Model: ${p.strix_model}. Content goes to the in-house gateway (${p.base_url}).`) + " On error it does not switch to another connection.";
   };
   f.llm_profile_id.addEventListener("change", upd); upd();
   const fields = [
@@ -510,7 +514,7 @@ async function viewTargets() {
           h("td", {}, envTag(t.environment)),
           h("td", {}, ls ? h("div", {}, statusChip(ls.status), h("div", { class: "status-sub" }, fmtShort(ls.started_at || ls.created_at))) : h("span", { class: "faint" }, "Never scanned")),
           h("td", {}, t.last_scan ? sevSummary((t.last_scan.summary || {}).counts, { status: t.last_scan.status, max: 2 }) : h("span", { class: "faint" }, "—")),
-          h("td", {}, t.next_run_at ? whenCell(t.next_run_at) : h("span", { class: "faint" }, "No schedule")),
+          h("td", {}, t.next_run_at ? whenCell(t.next_run_at) : h("span", { class: "faint" }, "No schedules")),
           h("td", { class: "shrink right", onclick: (e) => e.stopPropagation() },
             button("Scan", { size: "sm", ic: "play", disabled: !!t.active_scan, title: t.active_scan ? "This target has an active scan" : "Scan this target now", onclick: () => scanDialog(t) })));
       }),
@@ -521,7 +525,7 @@ async function viewTargets() {
 async function viewTarget(id) {
   const [t, schedules, scans, findings] = await Promise.all([api(`/api/targets/${id}`), api(`/api/schedules?target_id=${id}`), api(`/api/scans?target_id=${id}&limit=300`), api(`/api/targets/${id}/findings`)]);
   const del = guard(async () => {
-    if (!await confirmDialog("Delete target?", `“${t.name}” and its ${schedules.length} schedule(s) will be deleted. Scan history and Strix report files are kept.`, { confirmLabel: "Delete target", danger: true })) return;
+    if (!await confirmDialog("Delete target?", `“${t.name}” and its ${schedules.length} schedules will be deleted. Scan history and report files are kept.`, { confirmLabel: "Delete target", danger: true })) return;
     await api(`/api/targets/${id}`, { method: "DELETE" }); toast("Target deleted"); go("#/targets");
   });
   app.replaceChildren(
@@ -537,14 +541,14 @@ async function viewTarget(id) {
     t.active_scan ? alertBox("info", "This target has an active scan", ["Scan ", h("a", { href: `#/scans/${t.active_scan.id}` }, `#${t.active_scan.id}`), ` is ${STATUS_TR[t.active_scan.status].toLowerCase()}. Back-to-back scans on the same target aren't allowed.`]) : null,
     h("div", { class: "grid-main-side" },
       h("div", {},
-        findings.summary && findings.summary.unique ? section("Findings (deduplicated)", findingsCard(findings.summary, id), { hint: `${findings.summary.unique} unique` }) : null,
-        section("Scan history", h("div", { class: "table-card" }, scanTable(scans, { showTarget: false, empty: emptyState("This target hasn't been scanned yet", "Start the first scan to see its security posture.", [button("Scan now", { kind: "primary", ic: "play", onclick: () => scanDialog(t) })]) })), { hint: scans.length ? `${scans.length} record(s)` : null }),
+        findings.summary && findings.summary.unique ? section("Finding groups", findingsCard(findings.summary, id), { hint: `${findings.summary.unique} groups` }) : null,
+        section("Scan history", h("div", { class: "table-card" }, scanTable(scans, { showTarget: false, empty: emptyState("This target hasn't been scanned yet", "Start the first scan to see its security posture.", [button("Scan now", { kind: "primary", ic: "play", onclick: () => scanDialog(t) })]) })), { hint: scans.length ? `${scans.length} records` : null }),
         section("Schedules", h("div", { class: "table-card" }, scheduleTable(schedules, { showTarget: false, empty: emptyState("No schedules", "Plan recurring scans for this target.", [button("Add schedule", { onclick: () => go(`#/schedules/new?target=${id}`) })]) })))),
       h("div", {},
         section("Configuration", h("div", { class: "card card-pad" }, h("dl", { class: "dl stacked" },
           h("dt", {}, "Strix targets"), h("dd", { class: "mono" }, t.strix_targets.map((x) => h("div", {}, x))),
-          h("dt", {}, "In scope"), h("dd", { class: t.in_scope.length ? "mono" : "faint" }, t.in_scope.length ? t.in_scope.map((x) => h("div", {}, x)) : "Not defined"),
-          h("dt", {}, "Out of scope"), h("dd", { class: t.out_of_scope.length ? "mono" : "faint" }, t.out_of_scope.length ? t.out_of_scope.map((x) => h("div", {}, x)) : "Not defined"),
+          h("dt", {}, "In scope"), h("dd", { class: t.in_scope.length ? "mono" : "faint" }, t.in_scope.length ? t.in_scope.map((x) => h("div", {}, x)) : "Not set"),
+          h("dt", {}, "Out of scope"), h("dd", { class: t.out_of_scope.length ? "mono" : "faint" }, t.out_of_scope.length ? t.out_of_scope.map((x) => h("div", {}, x)) : "Not set"),
           h("dt", {}, "Auth profiles"), h("dd", {}, (t.auth_profiles || []).length ? (t.auth_profiles || []).map((p) => h("div", {}, p.name, " ", h("span", { class: "tag" }, AUTHKIND_TR[p.kind] || p.kind))) : h("span", { class: "faint" }, "None assigned")),
           h("dt", {}, "Default mode"), h("dd", {}, MODE_TR[t.default_scan_mode])))),
         section("Instructions sent to Strix", h("div", { class: "card card-pad" },
@@ -618,7 +622,7 @@ async function viewScans() {
   renderSeg();
   app.replaceChildren(
     pageHead("Scans", { lead: "All runs started manually, by a schedule, from CI or imported from the Strix TUI.",
-      actions: [menu([{ label: "Re-scan the strix_runs folder", icon: "refresh", onclick: guard(async () => { const r = await api("/api/import", { method: "POST" }); toast(`${r.imported} run(s) imported`); load(); }) }]),
+      actions: [menu([{ label: "Re-scan the strix_runs folder", icon: "refresh", onclick: guard(async () => { const r = await api("/api/import", { method: "POST" }); toast(`${r.imported} runs imported`); load(); }) }]),
         button("New scan", { kind: "primary", ic: "plus", onclick: () => scanDialog(null) })] }),
     h("div", { class: "toolbar" }, seg, h("span", { class: "grow" }), targetSel, search), box);
   await load();
@@ -627,21 +631,23 @@ async function viewScans() {
 
 async function viewScan(id) {
   let scan = await api(`/api/scans/${id}`);
-  let tab = ACTIVE.includes(scan.status) ? "log" : "findings";
+  let tab = ACTIVE.includes(scan.status) ? "live" : "findings";
   const headBox = h("div", {}), alertsBox = h("div", {}), factsBox = h("div", {}), tabsBox = h("div", { class: "tabs" }), body = h("div", {});
   const log = { source: "strix", offset: -1, box: null, level: "info", follow: null };
   let findingsCount = null;
+  const live = { cursor: -1, agent: "", list: null, tree: null, follow: null, state: null, busy: false, generation: 0, calls: new Map(), count: null, events: 0 };
+  const compose = { box: null, select: null, text: null, send: null, hint: null, history: null, count: null, rid: null, ridFor: "", sending: false, agentsSig: "", chosen: "", busy: false, gen: 0 };
 
   const renderHead = () => {
     const active = ACTIVE.includes(scan.status);
-    const canResume = ["cancelled", "failed", "interrupted"].includes(scan.status) && scan.run_name && scan.target_id;
+    const canResume = scan.trigger !== "verify" && ["cancelled", "failed", "interrupted"].includes(scan.status) && scan.run_name && scan.target_id;
     const files = scan.files || {};
-    const DL = [["report", "Rapor (Markdown)"], ["sarif", "SARIF"], ["json", "Bulgular (JSON)"], ["csv", "Bulgular (CSV)"], ["coverage", "Kapsam (coverage.json)"], ["log", "Strix logu"]].filter(([k]) => files[k]);
+    const DL = [["report", "Rapor (Markdown)"], ["sarif", "SARIF"], ["json", "Bulgular (JSON)"], ["csv", "Bulgular (CSV)"], ["coverage", "Kapsam (coverage.json)"], ["log", "Strix log"]].filter(([k]) => files[k]);
     headBox.replaceChildren(pageHead(scan.target_name || scan.name || `Scan #${scan.id}`, {
       crumb: h("a", { href: "#/scans" }, "Scans"),
       meta: [statusChip(scan.status), envTag(scan.environment || scan.target_environment), h("span", { class: "mono", title: (scan.targets || []).join("\n") }, (scan.targets || [])[0] || ""), h("span", { class: "faint" }, `#${scan.id}`)],
       actions: [
-        !active ? menu([{ label: "Delete record", icon: "trash", danger: true, onclick: guard(async () => {
+        !active && scan.trigger !== "verify" ? menu([{ label: "Delete record", icon: "trash", danger: true, onclick: guard(async () => {
           if (!await confirmDialog("Delete scan record?", "The record is removed from the list. The Strix output folder on disk is not deleted.", { confirmLabel: "Delete record", danger: true })) return;
           await api(`/api/scans/${id}`, { method: "DELETE" }); go("#/scans");
         }) }]) : null,
@@ -670,19 +676,21 @@ async function viewScan(id) {
       fact("Scan mode", MODE_TR[scan.scan_mode] || scan.scan_mode || "—"),
       fact("Started by", TRIGGER_TR[scan.trigger] || scan.trigger),
       fact("LLM cost", cost ? `$${Number(cost) < 0.01 ? Number(cost).toFixed(4) : Number(cost).toFixed(2)}` : h("span", { class: "faint" }, "Not reported by Strix"), cost ? null : "When Strix doesn't know the model price it writes cost as 0"),
-      fact("Tokens / requests", `${fmtTokens(sm.tokens || rm.tokens)} / ${sm.requests || rm.requests || "—"}`),
+      fact("Tokens / requests", `${fmtTokens(sm.tokens ?? rm.tokens)} / ${sm.requests ?? rm.requests ?? "—"}`),
       fact("Finished", scan.finished_at ? fmtDateSec(scan.finished_at) : ACTIVE.includes(scan.status) ? "Ongoing" : "—"),
       fact("Output folder", h("span", { class: "mono" }, scan.run_name || "—"), scan.run_dir || "")));
   };
 
-  const TABS = [["findings", "Findings"], ["log", "Live log"], ["agents", "Agents"], ["telemetry", "Telemetry"], ["report", "Report"], ["details", "Details"]];
-  const renderTabs = () => tabsBox.replaceChildren(TABS.map(([k, l]) => h("button", { type: "button", class: tab === k ? "on" : null, onclick: () => { tab = k; renderTabs(); renderBody(); } },
-    l, k === "findings" && findingsCount != null ? h("span", { class: "cnt" }, findingsCount) : null)));
+  const TABS = [["live", "Live activity"], ["findings", "Findings"], ["log", "Live log"], ["agents", "Agents"], ["telemetry", "Telemetry"], ["report", "Report"], ["details", "Details"]];
+  const renderTabs = () => { factsBox.hidden = tab === "live"; tabsBox.replaceChildren(TABS.map(([k, l]) => h("button", { type: "button", class: tab === k ? "on" : null, onclick: () => { tab = k; renderTabs(); renderBody(); } },
+    l, k === "findings" && findingsCount != null ? h("span", { class: "cnt" }, findingsCount) : null))); };
   const renderAll = () => { renderHead(); renderAlerts(); renderFacts(); };
 
   const renderBody = guard(async () => {
     log.box = null;
-    if (tab === "findings") body.replaceChildren(await findingsView());
+    live.list = null; live.busy = false; live.generation++;
+    if (tab === "live") { compose.loaded = false; body.replaceChildren(liveView()); await Promise.all([pollLive(), pollMessages(true)]); }
+    else if (tab === "findings") body.replaceChildren(await findingsView());
     else if (tab === "log") body.replaceChildren(logView());
     else if (tab === "agents") body.replaceChildren(await agentsView());
     else if (tab === "telemetry") body.replaceChildren(await telemetryView());
@@ -720,14 +728,230 @@ async function viewScan(id) {
 
   function findingDetail(v) {
     const sec = (t, html) => html ? [h("h4", {}, t), h("div", { class: "md", html })] : null;
-    if (v.markdown_html) return h("div", { class: "finding-body" }, h("div", { class: "md", html: v.markdown_html }));
+    if (v.markdown_html) return h("div", { class: "finding-body" }, v.group_id ? verificationPanel(v.group_id) : null, h("div", { class: "md", html: v.markdown_html }));
     return h("div", { class: "finding-body" },
+      v.group_id ? verificationPanel(v.group_id) : null,
       h("div", { class: "note" }, [v.target ? `Target: ${v.target}` : null, v.timestamp ? `Found: ${v.timestamp}` : null, v.confidence ? `Confidence: ${v.confidence}` : null, v.fix_effort ? `Fix effort: ${v.fix_effort}` : null].filter(Boolean).join(" · ")),
       sec("Description", v.description_html), sec("Impact", v.impact_html), sec("Technical analysis", v.technical_analysis_html),
       sec("Evidence", v.evidence_html), sec("Proof of concept (PoC)", v.poc_description_html),
       v.poc_script_code ? h("div", { class: "md" }, h("pre", {}, h("code", {}, v.poc_script_code))) : null,
       sec("Remediation", v.remediation_steps_html), sec("Assumptions", v.assumptions_html), sec("Counterevidence", v.counterevidence_html),
       v.cvss_breakdown ? [h("h4", {}, "CVSS breakdown"), h("dl", { class: "dl" }, Object.entries(v.cvss_breakdown).flatMap(([k, x]) => [h("dt", {}, k), h("dd", {}, x)]))] : null);
+  }
+
+  function liveView() {
+    live.cursor = -1; live.agent = ""; live.calls = new Map(); live.events = 0;
+    live.follow = h("input", { type: "checkbox", checked: true });
+    live.list = h("div", { class: "live-feed", role: "log", "aria-label": "Strix activity feed", "aria-live": "off" });
+    live.tree = h("div", { class: "live-agents" });
+    live.state = h("span", { class: "live-sync", role: "status" }, "Loading activity…");
+    live.count = h("span", { class: "live-count" }, "");
+    const sm = scan.summary || {};
+    return h("div", { class: "live-layout" },
+      h("section", { class: "card live-main" },
+        h("div", { class: "live-toolbar" },
+          h("div", { class: "live-title" }, h("span", { class: "live-signal" + (ACTIVE.includes(scan.status) ? " active" : "") }),
+            h("div", {}, h("h2", {}, "Activity stream"), h("div", { class: "live-subtitle" }, ACTIVE.includes(scan.status) ? "Live updates from Strix" : "Recorded activity from this scan"))),
+          h("label", { class: "check live-follow" }, live.follow, "Auto-follow")),
+        h("div", { class: "live-state" }, live.state, live.count), live.list, composerView()),
+      h("aside", { class: "live-sidebar" },
+        h("div", { class: "live-side-head" }, h("h2", {}, "Agents"), h("span", { class: "tag", id: "liveAgentCount" }, "—")),
+        h("p", { class: "live-side-help" }, "Select an agent to focus its activity."), live.tree,
+        h("div", { class: "live-run-info" }, h("div", { class: "live-info-label" }, "THIS RUN"),
+          h("div", { class: "live-info-row" }, h("span", {}, "Duration"), h("strong", {}, durationText(scan))),
+          h("div", { class: "live-info-row" }, h("span", {}, "Tokens"), h("strong", {}, fmtTokens(sm.tokens))),
+          h("div", { class: "live-info-row" }, h("span", {}, "Mod"), h("strong", {}, MODE_TR[scan.scan_mode] || "—")),
+          h("div", { class: "live-model", title: scan.model || "" }, modelShort(scan.model)))));
+  }
+
+  const MSG_STATE = { sending: ["Sending", "neutral"], queued: ["Queued for next model call", "queued"], delivered: ["In agent context", "completed"],
+    expired: ["Not delivered", "neutral"], rejected: ["Rejected", "failed"], unknown: ["Unconfirmed", "queued"] };
+  const MSG_HELP = { queued: "Strix accepted it. It is added to the agent's context before the agent's next model call.",
+    delivered: "Added to the agent's conversation. Whether the agent follows it shows in the activity stream.",
+    unknown: "No confirmation arrived. It may have been accepted, so it was not resent. Check again asks Strix without sending a second copy." };
+
+  function composerView() {
+    compose.gen++;
+    compose.agentsSig = ""; compose.rid = null; compose.ridFor = ""; compose.sending = false; compose.busy = false;
+    compose.select = h("select", { id: "composeAgent", "aria-label": "Agent to message", onchange: () => { compose.chosen = compose.select.value; } });
+    compose.text = h("textarea", { id: "composeText", rows: 2, maxlength: 4000, placeholder: "Write an instruction for the selected agent…", "aria-label": "Message to the agent",
+      oninput: () => { compose.count.textContent = `${compose.text.value.length}/4000`; compose.text.style.height = "auto"; compose.text.style.height = Math.min(compose.text.scrollHeight, 168) + "px"; updateSend(); },
+      onkeydown: (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendMessage(); } } });
+    compose.count = h("span", { class: "compose-count" }, "0/4000");
+    compose.send = button("Send", { kind: "primary", size: "sm", onclick: () => sendMessage(), disabled: true, title: "Send (⌘/Ctrl+Enter)" });
+    compose.hint = h("div", { class: "compose-hint", role: "status" }, "Checking whether this scan accepts messages…");
+    compose.history = h("div", { class: "compose-history" });
+    compose.form = h("div", { class: "compose-form", hidden: true },
+      h("div", { class: "compose-row" }, h("label", { class: "compose-label", for: "composeAgent" }, "Message"), compose.select, compose.count),
+      compose.text,
+      h("div", { class: "compose-foot" }, h("span", { class: "help" }, "Added to the agent's context before its next model call. Keep credentials in the Vault."), compose.send));
+    compose.box = h("section", { class: "compose", "aria-label": "Message an agent" }, compose.form, compose.hint, compose.history);
+    return compose.box;
+  }
+
+  function updateSend() {
+    if (!compose.send) return;
+    compose.send.disabled = compose.sending || !compose.select.value || !compose.text.value.trim() || compose.form.hidden;
+    compose.send.textContent = compose.sending ? "Sending…" : "Send";
+  }
+
+  function renderMessages(m) {
+    const accepting = (m.agents || []).filter((a) => a.accepting);
+    compose.form.hidden = !m.available || !accepting.length;
+    compose.hint.textContent = !m.available ? (ACTIVE.includes(scan.status) ? m.reason : "Messages can only be sent while a scan is running.")
+      : m.budget_paused ? "The scan is paused at its budget limit. Messages do not resume it."
+      : !accepting.length ? "No agent is currently running or waiting." : "";
+    compose.hint.hidden = !compose.hint.textContent;
+    const sig = accepting.map((a) => `${a.id}:${a.name}:${a.status}`).join("|");
+    if (sig !== compose.agentsSig) {
+      compose.agentsSig = sig;
+      const want = compose.chosen || compose.select.value || (accepting.some((a) => a.id === live.agent) ? live.agent : (accepting[0] || {}).id);
+      compose.select.replaceChildren(...accepting.map((a) => h("option", { value: a.id }, `${a.name} · ${a.status === "running" ? "Running" : "Waiting"}`)));
+      if (accepting.some((a) => a.id === want)) compose.select.value = want;
+    }
+    const rows = m.messages || [];
+    compose.history.hidden = !rows.length;
+    compose.history.replaceChildren(rows.length ? h("details", { class: "compose-sent", open: compose.history.dataset.open === "1" || null,
+      ontoggle: (e) => { compose.history.dataset.open = e.target.open ? "1" : ""; } },
+      h("summary", {}, `Sent messages · ${rows.length}`),
+      h("ol", {}, rows.map((x) => {
+        const [label, cls] = MSG_STATE[x.state] || [x.state, "neutral"];
+        return h("li", { class: "compose-msg" },
+          h("div", { class: "compose-msg-head" }, h("strong", {}, x.agent_name || x.agent_id), h("time", { datetime: x.created_at || "" }, fmtShort(x.created_at)),
+            h("span", { class: `status ${cls}`, title: MSG_HELP[x.state] || "" }, h("span", { class: "dot" }), label)),
+          h("div", { class: "compose-msg-text" }, x.content || h("span", { class: "faint" }, "Content unavailable")),
+          x.reason || MSG_HELP[x.state] ? h("div", { class: "help" }, x.reason || MSG_HELP[x.state]) : null,
+          x.state === "unknown" && m.available ? button("Check again", { size: "sm", onclick: guard(async () => { await api(`/api/scans/${id}/messages/${x.id}/recheck`, { method: "POST" }); await pollMessages(true); }) }) : null);
+      }))) : []);
+    updateSend();
+  }
+
+  async function pollMessages(force = false) {
+    if (!compose.box || compose.busy) return;
+    if (!force && !ACTIVE.includes(scan.status) && compose.loaded) return;
+    compose.busy = true;
+    const gen = compose.gen;
+    try {
+      const m = await api(`/api/scans/${id}/messages`);
+      if (gen !== compose.gen) return;
+      compose.loaded = true;
+      renderMessages(m);
+    } catch (e) {
+      if (gen === compose.gen) { compose.hint.hidden = false; compose.hint.textContent = "Message status unavailable · retrying…"; }
+    } finally { if (gen === compose.gen) compose.busy = false; }
+  }
+
+  async function sendMessage() {
+    const agentId = compose.select.value, content = compose.text.value.trim();
+    if (compose.sending || !agentId || !content) return;
+    const key = `${agentId}\n${content}`;
+    if (compose.ridFor !== key) { compose.rid = crypto.randomUUID(); compose.ridFor = key; }   // a retry of the same text reuses its ID
+    compose.sending = true; updateSend();
+    try {
+      const r = await api(`/api/scans/${id}/messages`, { method: "POST", body: { agent_id: agentId, content, request_id: compose.rid } });
+      if (r.state === "rejected") toast(r.reason || "Strix rejected the message.", true);
+      else {
+        compose.text.value = ""; compose.text.style.height = ""; compose.count.textContent = "0/4000";
+        compose.rid = null; compose.ridFor = "";
+        toast(r.state === "unknown" ? "No confirmation from Strix yet; the message was not resent." : "Message accepted by Strix");
+      }
+    } catch (e) { toast(e.message, true); }
+    finally { compose.sending = false; updateSend(); compose.loaded = false; await pollMessages(true); }
+  }
+
+  function activityPreview(text, tool) {
+    let value = text || "";
+    try {
+      const o = JSON.parse(value);
+      const summaries = { view_agent_graph: "Agent status and task hierarchy", list_reports: "Recorded vulnerability reports", list_coverage: "Tested surfaces and coverage status", wait_for_agents: "Waiting for child agents to finish" };
+      value = o.cmd || o.task || o.url || o.content || o.message || o.output || o.executive_summary || o.surface ||
+        (o.request_id ? `HTTP request #${o.request_id} · ${o.part === "response" ? "response" : "request"}` : summaries[tool]) ||
+        Object.entries(o).filter(([, v]) => v != null && v !== "").map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(" · ") || "No parameters required";
+      if (typeof value !== "string") value = JSON.stringify(value);
+    } catch { /* ordinary tool text */ }
+    const lines = String(value).split("\n").map((x) => x.trim()).filter(Boolean);
+    return (lines.find((ln) => !/^(Chunk ID:|Wall time:|Process exited|Final output:|Output:|[{}]$|"success":)/.test(ln)) || "View details").slice(0, 210);
+  }
+
+  async function pollLive() {
+    if (!live.list || live.busy) return;
+    live.busy = true;
+    const gen = live.generation, list = live.list;
+    try {
+      const [r, a] = await Promise.all([api(`/api/scans/${id}/activity?after=${live.cursor}${live.agent ? "&agent_id=" + encodeURIComponent(live.agent) : ""}`), api(`/api/scans/${id}/agents`)]);
+      if (gen !== live.generation || list !== live.list) return;
+      const byId = Object.fromEntries(a.agents.map((x) => [x.id, x]));
+      if (live.cursor === -1) { list.replaceChildren(); live.calls = new Map(); live.events = 0; }
+      else list.querySelector(".live-empty")?.remove();
+      const TOOL_LABELS = { exec_command: "Command", write_stdin: "Command output", create_agent: "Spawn agent", agent_finish: "Agent finished",
+        view_request: "HTTP exchange", list_requests: "HTTP requests", list_reports: "Finding list", send_request: "HTTP request", repeat_request: "Repeat request",
+        create_todo: "Task list", update_todo: "Task update", list_coverage: "Coverage summary", record_coverage: "Coverage update",
+        create_vulnerability_report: "New finding", update_vulnerability_report: "Finding update", finish_scan: "Scan report",
+        view_agent_graph: "Agent status", wait_for_agents: "Waiting for agents", get_threat_model: "Threat model", amend_threat_model: "Threat model update" };
+      for (const x of r.items || []) {
+        live.events++;
+        const paired = x.kind === "tool_result" && x.call_id ? live.calls.get(x.call_id) : null;
+        if (paired && list.contains(paired.entry)) {
+          paired.state.textContent = "Response received";
+          paired.state.classList.add("received");
+          paired.detail.append(h("div", { class: "live-code-label" }, "OUTPUT"), h("pre", { class: "live-text" }, x.text || "(empty output)"));
+          if (x.truncated) paired.detail.append(h("div", { class: "help" }, "Long output truncated."));
+          continue;
+        }
+        const agent = byId[x.agent_id];
+        const agentName = agent ? agent.name : x.agent_id;
+        const isMessage = x.kind === "message";
+        const initials = String(agentName || "A").split(/[\s/—]+/).slice(0, 2).map((v) => v[0] || "").join("").toUpperCase();
+        const state = h("span", { class: "live-tool-state" + (x.kind === "tool_result" ? " received" : "") }, x.kind === "tool_result" ? "Response received" : "Call recorded");
+        const entry = h("article", { class: "live-event " + (isMessage ? "message" : "tool"), "data-event-id": x.id },
+          h("header", {}, h("span", { class: "live-avatar", "aria-hidden": "true" }, initials),
+            h("strong", {}, agentName), h("time", { datetime: x.at || "" }, fmtShort(x.at))));
+        if (isMessage) entry.append(h("div", { class: "live-message-text" }, x.text));
+        else {
+          const detail = h("details", {},
+            h("summary", {}, h("div", { class: "live-tool-top" }, h("span", { class: "live-tool-label" }, TOOL_LABELS[x.tool] || "Tool activity"), state),
+              h("div", { class: "live-tool-preview" }, activityPreview(x.text, x.tool)), h("span", { class: "live-tool-name" }, x.tool || "Strix")),
+            h("div", { class: "live-code-label" }, x.kind === "tool_result" ? "OUTPUT" : "INPUT"), h("pre", { class: "live-text" }, x.text || "(empty output)"));
+          entry.append(detail);
+          if (x.kind === "tool_call" && x.call_id) live.calls.set(x.call_id, { entry, detail, state });
+        }
+        if (x.truncated) entry.append(h("div", { class: "help" }, "Long output truncated."));
+        list.append(entry);
+      }
+      live.cursor = r.cursor;
+      while (list.childElementCount > 180) list.firstElementChild.remove();
+      for (const [cid, item] of live.calls) if (!list.contains(item.entry)) live.calls.delete(cid);
+      if (!list.childElementCount) list.append(h("div", { class: "live-empty faint" }, r.available ? "No visible activity for this agent yet." : "Strix has not created the activity store yet."));
+      if (live.follow.checked && (r.items || []).length) list.scrollTop = list.scrollHeight;
+      const labels = { ...STATUS_TR, waiting: "Waiting", idle: "Idle", stopped: "Stopped" };
+      const seen = new Set(), nodes = [];
+      const pick = (aid) => {
+        live.agent = aid; live.cursor = -1; live.generation++; live.busy = false;
+        if (aid && compose.select && [...compose.select.options].some((o) => o.value === aid)) { compose.select.value = aid; compose.chosen = aid; }
+        pollLive();
+      };
+      nodes.push(h("button", { type: "button", class: "live-all" + (!live.agent ? " selected" : ""), onclick: () => pick(""), "aria-pressed": !live.agent }, icon("scans"), "All agents", h("span", {}, a.agents.length)));
+      const visit = (agent, depth) => {
+        if (seen.has(agent.id)) return;
+        seen.add(agent.id);
+        const b = h("button", { type: "button", class: "live-agent" + (live.agent === agent.id ? " selected" : "") + (depth ? " child" : ""), "aria-pressed": live.agent === agent.id, onclick: () => pick(agent.id) },
+          h("span", { class: "live-agent-name" }, agent.name),
+          h("span", { class: "status " + (agent.status === "running" ? "running" : agent.status === "completed" ? "completed" : "neutral") }, h("span", { class: "dot" }), labels[agent.status] || agent.status));
+        b.style.marginLeft = `${Math.min(depth, 4) * 12}px`;
+        nodes.push(b);
+        if (live.agent === agent.id && agent.task) nodes.push(h("details", { class: "live-agent-task" }, h("summary", {}, "View task"), h("div", {}, agent.task)));
+        a.agents.filter((x) => x.parent === agent.id).forEach((x) => visit(x, depth + 1));
+      };
+      a.agents.filter((x) => !x.parent || !byId[x.parent]).forEach((x) => visit(x, 0));
+      a.agents.forEach((x) => visit(x, 0));
+      live.tree.replaceChildren(nodes);
+      const agentCount = document.getElementById("liveAgentCount"); if (agentCount) agentCount.textContent = a.agents.length;
+      live.state.textContent = r.note || `${ACTIVE.includes(scan.status) ? "Live connection · 2s updates" : "Recorded session"} · ${new Date().toLocaleTimeString("en-US", { timeZone: TZ })}`;
+      live.count.textContent = `${list.querySelectorAll(".live-event").length} events`;
+      if (r.has_more) setTimeout(() => { if (live.list === list) pollLive(); }, 0);
+    } catch (e) {
+      if (live.state) live.state.textContent = "Connection lost · reconnecting…";
+    } finally { if (gen === live.generation) live.busy = false; }
   }
 
   function logView() {
@@ -769,21 +993,29 @@ async function viewScan(id) {
   async function agentsView() {
     const [a, tel] = await Promise.all([api(`/api/scans/${id}/agents`), api(`/api/scans/${id}/telemetry`)]);
     if (!a.agents.length) return h("div", { class: "card" }, emptyState("No agent info", "Strix writes agent states after the scan starts."));
-    const stMap = { running: "running", completed: "completed", failed: "failed" };
+    const stMap = { running: "running", completed: "completed", failed: "failed", waiting: "queued" };
+    const labels = { ...STATUS_TR, waiting: "Waiting", idle: "Idle", stopped: "Stopped", budget_stopped: "Stopped at budget limit" };
     const name = (aid) => (a.agents.find((y) => y.id === aid) || {}).name || aid;
     const byId = {}; ((tel.telemetry || {}).agents || []).forEach((g) => { byId[g.agent_id] = g; });
-    return h("div", {}, h("div", { class: "note" }, Object.entries(a.counts).map(([k, n]) => `${n} ${k}`).join(" · ") + " · usage and tool counts from telemetry"),
-      h("div", { class: "table-card" }, table([{ label: "Agent" }, { label: "Status" }, { label: "Requests" }, { label: "Tokens" }, { label: "Tool calls" }, { label: "Parent agent" }], a.agents.map((x) => {
+    const ordered = [], visited = new Set();
+    const visit = (agent) => {
+      if (visited.has(agent.id)) return;
+      visited.add(agent.id); ordered.push(agent);
+      a.agents.filter((x) => x.parent === agent.id).forEach(visit);
+    };
+    a.agents.filter((x) => !x.parent || !a.agents.some((p) => p.id === x.parent)).forEach(visit);
+    a.agents.forEach(visit);
+    return h("div", {}, h("div", { class: "note" }, Object.entries(a.counts).map(([k, n]) => `${n} ${labels[k] || k}`).join(" · ")),
+      h("div", { class: "agent-grid" }, ordered.map((x) => {
         const g = byId[x.id] || {};
-        const topTools = Object.entries(g.tools || {}).slice(0, 3).map(([t, n]) => `${t} ${n}`).join(", ");
-        return h("tr", {},
-          h("td", {}, h("div", { class: "primary-line" }, x.name), g.model ? h("div", { class: "secondary-line mono", title: g.model }, g.model) : null),
-          h("td", {}, h("span", { class: `status ${stMap[x.status] || "cancelled"}` }, h("span", { class: "dot" }), x.status)),
-          h("td", { class: "num" }, g.requests ?? "—"),
-          h("td", { class: "num" }, g.tokens != null ? fmtTokens(g.tokens) : "—"),
-          h("td", {}, g.tools_total ? h("div", {}, h("div", {}, g.tools_total), topTools ? h("div", { class: "secondary-line", title: topTools }, topTools) : null) : h("span", { class: "faint" }, "—")),
-          h("td", { class: "muted" }, x.parent ? name(x.parent) : "—"));
-      }), null)));
+        return h("article", { class: "card agent-card", id: `agent-${x.id}` },
+          h("header", {}, h("h3", {}, x.name), h("span", { class: `status ${stMap[x.status] || "neutral"}` }, h("span", { class: "dot" }), labels[x.status] || x.status)),
+          x.parent ? h("div", { class: "agent-parent" }, "Parent agent: ", h("a", { href: `#agent-${x.parent}`, onclick: (e) => { e.preventDefault(); document.getElementById(`agent-${x.parent}`)?.scrollIntoView({ block: "center" }); } }, name(x.parent))) : h("div", { class: "agent-parent" }, "Root agent"),
+          h("div", { class: "agent-task" }, x.task || "Strix did not record a task description."),
+          g.model ? h("div", { class: "secondary-line mono", title: g.model }, g.model) : null,
+          h("div", { class: "agent-metrics" }, h("span", {}, "Requests: ", g.requests ?? "—"), h("span", {}, "Token: ", fmtTokens(g.tokens)), h("span", {}, "Tool calls: ", g.tools_total ?? "—")),
+          h("div", { class: "agent-activity" }, (x.activities || []).length ? [h("h4", {}, "Recent activity"), ...x.activities.map((v) => h("div", {}, h("span", { class: "mono" }, v.tool), " · ", fmtShort(v.at && !/[Z+]/.test(v.at) ? v.at.replace(" ", "T") + "Z" : v.at)))] : "No tool activity recorded."));
+      })));
   }
 
   async function telemetryView() {
@@ -797,8 +1029,8 @@ async function viewScan(id) {
     return h("div", {},
       h("div", { class: "stats" },
         stat("Completed requests", req.completed ?? na, req.attempts ? `${req.attempts} attempts` : null, "run.json: completed model requests · log: total attempts"),
-        stat("Failed requests", req.errors ?? h("span", {}, "0"), null, "Requests that ended with a model/provider error"),
-        stat("Retries", ret.total || 0, ret.total ? `rate limit ${ret.rate_limit} · timeout ${ret.timeout} · connection ${ret.connection}` : "none"),
+        stat("Failed requests", req.errors ?? h("span", { class: "faint" }, "no data"), null, "Requests that ended with a model/provider error"),
+        stat("Retries", ret.total ?? h("span", { class: "faint" }, "no data"), ret.total ? `rate limit ${ret.rate_limit} · timeout ${ret.timeout} · connection ${ret.connection}` : ret.total === 0 ? "none" : null),
         stat("LLM cost", costStr || na, cost.note, cost.note)),
       h("div", { class: "stats" },
         stat("Tokens (total)", tok.total != null ? fmtTokens(tok.total) : na, tok.cached != null ? `${fmtTokens(tok.cached)} cached` : null),
@@ -817,7 +1049,7 @@ async function viewScan(id) {
         h("dt", {}, "Strix targets"), h("dd", { class: "mono" }, (scan.targets || []).map((t) => h("div", {}, t))),
         h("dt", {}, "Budget limit"), h("dd", {}, scan.max_budget ? `$${scan.max_budget}` : "Unlimited"),
         h("dt", {}, "Turns per agent"), h("dd", {}, scan.max_turns || "Strix default (500)"),
-        h("dt", {}, "Finding gate"), h("dd", {}, scan.fail_on ? `${SEV_TR[scan.fail_on]} and above` : "Not defined"),
+        h("dt", {}, "Finding gate"), h("dd", {}, scan.fail_on ? `${SEV_TR[scan.fail_on]} and above` : "Not set"),
         h("dt", {}, "Resumed run"), h("dd", { class: scan.resume_run ? "mono" : "faint" }, scan.resume_run || "—"),
         h("dt", {}, "Strix exit code"), h("dd", {}, scan.exit_code ?? "—", scan.exit_code === 2 ? h("span", { class: "faint" }, " · findings found") : scan.exit_code === 1 ? h("span", { class: "faint" }, " · error or interruption") : null),
         h("dt", {}, "Output folder"), h("dd", { class: "mono" }, scan.run_dir || "—"),
@@ -826,6 +1058,7 @@ async function viewScan(id) {
         scan.executive_summary_html ? h("div", { class: "md", html: scan.executive_summary_html }) : h("div", { class: "faint" }, "Strix did not write a summary for this run.")));
   }
 
+  every(2000, () => { if (live.list) { pollLive(); pollMessages(); } });
   renderAll(); renderTabs();
   app.replaceChildren(headBox, alertsBox, factsBox, tabsBox, body);
   await renderBody();
@@ -843,7 +1076,7 @@ async function viewScan(id) {
 
 // ================================================================== schedules
 function scheduleTable(list, { showTarget = true, empty } = {}) {
-  const cols = [...(showTarget ? [{ label: "Target" }] : []), { label: "Schedule" }, { label: "Next run" }, { label: "Last run" }, { label: "Status" }, { label: "", cls: "shrink" }];
+  const cols = [...(showTarget ? [{ label: "Target" }] : []), { label: "Scheduling" }, { label: "Next run" }, { label: "Last run" }, { label: "Status" }, { label: "", cls: "shrink" }];
   return table(cols, list.map((s) => {
     const done = !s.enabled && s.kind === "once" && s.last_outcome;
     const last = s.last_scan && s.last_outcome === "started"
@@ -939,7 +1172,7 @@ async function viewScheduleForm(id, presetTarget) {
         button(s.enabled ? "Pause" : "Enable", { ic: s.enabled ? "pause" : "play", onclick: guard(async () => { await api(`/api/schedules/${id}/${s.enabled ? "pause" : "resume"}`, { method: "POST" }); router(); }) })] : null }),
     h("div", { class: "grid-main-side" },
       h("form", { class: "card card-pad form", onsubmit: (e) => { e.preventDefault(); save(); } },
-        formSection("Schedule", "Choose when and on which target it runs.", [
+        formSection("Scheduling", "Choose when and on which target it runs.", [
           field("Target", f.target_id), field("Name (optional)", f.name),
           h("div", { class: "field" }, h("div", { class: "label" }, "Repeat"), kindSeg),
           kf.once, kf.time, kf.days, kf.interval, kf.cron,
@@ -967,6 +1200,7 @@ async function viewSettings() {
     max_concurrent: h("input", { type: "number", min: "1", max: "10", value: st.max_concurrent }),
     default_scan_mode: select([["quick", "Quick"], ["standard", "Standard"], ["deep", "Deep"]], st.default_scan_mode),
     telemetry: h("input", { type: "checkbox", checked: st.telemetry === "1" }),
+    agent_messaging: h("input", { type: "checkbox", checked: st.agent_messaging !== "0" }),
     webhook_url: h("input", { type: "text", value: st.webhook_url, placeholder: "https://… (Teams or Slack incoming webhook)", class: "mono" }),
   };
   const saveRuntime = guard(async () => {
@@ -979,7 +1213,7 @@ async function viewSettings() {
       h("div", { class: "secondary-line mono", title: p.strix_model }, p.strix_model))),
     h("td", {}, p.provider_label, h("div", { class: "secondary-line mono", title: p.base_url || "" }, p.base_url || "Provider default")),
     h("td", {}, p.has_api_key ? "Stored" : h("span", { class: "faint" }, "None")),
-    h("td", {}, p.used_by_schedules ? `${p.used_by_schedules} schedule(s)` : h("span", { class: "faint" }, "—")),
+    h("td", {}, p.used_by_schedules ? `${p.used_by_schedules} schedules` : h("span", { class: "faint" }, "—")),
     h("td", { class: "shrink right" }, h("div", { class: "actions" },
       button("Test", { size: "sm", onclick: guard(async () => {
         const r = await api("/api/llm-profiles/test", { method: "POST", body: { id: p.id, provider: p.provider, base_url: p.base_url, model: p.model, ca_cert_path: p.ca_cert_path } });
@@ -988,7 +1222,7 @@ async function viewSettings() {
       menu([!p.is_default ? { label: "Make default", icon: "check", onclick: guard(async () => { await api(`/api/llm-profiles/${p.id}/default`, { method: "POST" }); router(); refreshSystem(); }) } : null,
         { label: "Edit", icon: "edit", onclick: () => llmDialog(p) }, "-",
         { label: "Delete", icon: "trash", danger: true, onclick: guard(async () => {
-          if (!await confirmDialog("Delete LLM connection?", `“${p.name}” will be deleted. Deletion is blocked if it is used by schedules.`, { confirmLabel: "Delete", danger: true })) return;
+          if (!await confirmDialog("Delete LLM connection?", `“${p.name}” will be deleted. A connection used by schedules cannot be deleted.`, { confirmLabel: "Delete", danger: true })) return;
           await api(`/api/llm-profiles/${p.id}`, { method: "DELETE" }); router(); refreshSystem();
         }) }])))));
   const o = lastOverview || await api("/api/overview");
@@ -1008,6 +1242,15 @@ async function viewSettings() {
         emptyState("No LLM connection", "Add an OpenRouter or in-house LiteLLM connection for scans.", [button("Add connection", { kind: "primary", ic: "plus", onclick: () => llmDialog(null) })]))),
       h("div", { class: "note", style: null }, "Connections are passed to Strix via the STRIX_LLM, LLM_API_KEY and LLM_API_BASE environment variables. API keys are stored encrypted on the server and never sent to the browser.")),
     { right: button("Add connection", { ic: "plus", size: "sm", onclick: () => llmDialog(null) }) }),
+    section("Data protection", h("div", { class: "card card-pad" },
+      h("dl", { class: "dl" },
+        h("dt", {}, "Encryption key"), h("dd", { class: "mono" }, (st.key_status || {}).source === "env" ? "Environment variable" : (st.key_status || {}).path || "Not reported"),
+        h("dt", {}, "Key storage"), h("dd", {}, (st.key_status || {}).colocated ? "Inside the data directory" : "Outside the data directory"),
+        h("dt", {}, "Schema version"), h("dd", {}, st.schema_version ?? "—")),
+      h("details", {}, h("summary", {}, "Migration history"),
+        h("div", { class: "occ-list" }, (st.migrations || []).map((m) => h("div", { class: "occ" },
+          h("strong", {}, `Version ${m.version}`), " · ", fmtDate(m.applied_at),
+          m.backup ? h("div", { class: "secondary-line mono", title: m.backup }, `Backup: ${m.backup}`) : h("div", { class: "faint" }, "No backup recorded by this migration"))))))),
     section("Strix runtime environment", h("form", { class: "card card-pad form", onsubmit: (e) => { e.preventDefault(); saveRuntime(); } },
       formSection("Strix", "Installed Strix CLI and output folder.", [
         field("Strix binary", f.strix_bin),
@@ -1015,7 +1258,11 @@ async function viewSettings() {
       formSection("Execution", "Queue and defaults.", [
         h("div", { class: "field-row two" }, field("Concurrent scans", f.max_concurrent, "The rest wait in the queue. Only one scan runs on the same target at a time."), field("Default mode", f.default_scan_mode)),
         h("div", { class: "field" }, h("div", { class: "label" }, "Strix telemetry"), h("label", { class: "check" }, f.telemetry, "Telemetry on (STRIX_TELEMETRY=1)"),
-          h("div", { class: "help" }, "Strix defaults to on; Skynet starts it off. Keeping it off in-house is recommended."))]),
+          h("div", { class: "help" }, "Strix defaults to on; Skynet starts it off. Keeping it off in-house is recommended.")),
+        h("div", { class: "field" }, h("div", { class: "label" }, "Agent messaging"), h("label", { class: "check" }, f.agent_messaging, "Start new scans with the messaging bridge"),
+          h("div", { class: "help" }, (st.agent_messaging_status || {}).available
+            ? `Available · Strix runtime ${st.agent_messaging_status.runtime_version} matches the binary. Applies to scans started after saving.`
+            : `Unavailable · ${(st.agent_messaging_status || {}).reason || "Unknown"} Scans run without messaging.`))]),
       formSection("Notification", "A JSON payload is sent to the webhook when a scan finishes.", [field("Webhook URL", f.webhook_url)]),
       h("div", { class: "form-actions" }, button("Save", { kind: "primary", type: "submit" })))),
     h("div", { class: "grid-2" },
@@ -1179,11 +1426,11 @@ async function viewCampaign(id) {
       h("div", { class: "stat" }, h("div", { class: "k" }, "Targets"), h("div", { class: "v" }, c.target_ids.length)),
       h("div", { class: "stat" + (fs.open_counts && (fs.open_counts.critical || fs.open_counts.high) ? " alert" : "") }, h("div", { class: "k" }, "Open critical / high"),
         h("div", { class: "v" }, fs.open_counts ? `${fs.open_counts.critical || 0} / ${fs.open_counts.high || 0}` : "—")),
-      h("div", { class: "stat" }, h("div", { class: "k" }, "Unique findings"), h("div", { class: "v" }, fs.unique ?? "—"), fs.seen_after_fix ? h("div", { class: "s alert-text" }, `${fs.seen_after_fix} seen after fix`) : null),
+      h("div", { class: "stat" }, h("div", { class: "k" }, "Finding groups"), h("div", { class: "v" }, fs.unique ?? "—"), fs.seen_after_fix ? h("div", { class: "s alert-text" }, `${fs.seen_after_fix} seen after remediation`) : null),
       h("div", { class: "stat" }, h("div", { class: "k" }, "Scans"), h("div", { class: "v" }, c.scan_count), h("div", { class: "s" }, c.active_scans ? `${c.active_scans} active` : "all done"))),
     h("div", { class: "grid-main-side" },
       h("div", {},
-        section("Findings", findingsCard(fs, scans.map((s) => s.id), id), { hint: fs.unique ? `${fs.unique} unique, ${fs.occurrences} occurrences` : null }),
+        section("Findings", findingsCard(fs, scans.map((s) => s.id), id), { hint: fs.unique ? `${fs.unique} groups, ${fs.occurrences} occurrences` : null }),
         section("Scans", h("div", { class: "table-card" }, scanTable(scans, { empty: emptyState("No scans in this campaign", "Start a scan linked to the campaign.") }))),
         c.schedules && c.schedules.length ? section("Schedules", h("div", { class: "table-card" }, scheduleTable(c.schedules))) : null),
       h("div", {},
@@ -1193,11 +1440,11 @@ async function viewCampaign(id) {
 
 // Compact findings summary card with a severity breakdown; links to the full findings table (campaign or target).
 function findingsCard(fs, scanIds, campaignId) {
-  if (!fs || !fs.unique) return h("div", { class: "card" }, emptyState("No findings", "No deduplicated findings in this scope. They are collected here as scans complete."));
+  if (!fs || !fs.unique) return h("div", { class: "card" }, emptyState("No findings", "No finding groups in this scope. They are collected as scans complete."));
   const openSev = fs.open_counts || {};
   return h("div", { class: "card card-pad" },
     h("div", { class: "sev-bars" }, SEV.map((s) => fs.counts[s] ? h("div", { class: "sev-bar" },
-      h("span", { class: `sevpill ${s}` }, SEV_TR[s]), h("span", {}, `${fs.counts[s]} unique`), openSev[s] ? h("span", { class: "faint" }, `${openSev[s]} open`) : null) : null)),
+      h("span", { class: `sevpill ${s}` }, SEV_TR[s]), h("span", {}, `${fs.counts[s]} groups`), openSev[s] ? h("span", { class: "faint" }, `${openSev[s]} open`) : null) : null)),
     h("div", { class: "rem-row" }, Object.entries(fs.remediation || {}).map(([k, n]) => n ? h("span", { class: "tag" }, `${REMEDIATION_TR[k]}: ${n}`) : null)),
     h("div", { class: "actions mt" }, button("Review findings", { onclick: () => findingsDialog(scanIds, campaignId) })));
 }
@@ -1228,6 +1475,62 @@ async function viewCampaignForm(id) {
       h("div", { class: "form-actions" }, button("Cancel", { onclick: () => history.back() }), button("Save", { kind: "primary", type: "submit" }))));
 }
 
+function verificationPanel(gid) {
+    const verifBox = h("div", { class: "verif-section" }, h("div", { class: "faint" }, "Loading…"));
+    const VLABEL = { reverified: "Re-verified", not_reproduced: "Not reproduced (this attempt)", inconclusive: "Inconclusive", error: "Run error", pending: "Pending" };
+    const VCLS = { reverified: "failed", not_reproduced: "neutral", inconclusive: "queued", error: "failed", pending: "running" };
+    let vpoll = null;
+    const stopPoll = () => { if (vpoll) { clearInterval(vpoll); vpoll = null; } };
+    const startVerify = guard(async () => {
+      const g = await api(`/api/findings/${gid}`);
+      const [target, profiles, campaigns] = await Promise.all([api(`/api/targets/${g.target_id}`), api("/api/llm-profiles"), api("/api/campaigns")]);
+      const connection = select(profiles.map((p) => [String(p.id), `${p.name} · ${p.model}`]), String(target.llm_profile_id || (profiles.find((p) => p.is_default) || profiles[0] || {}).id || ""));
+      const extras = scanExtras(target.auth_profiles || [], campaigns, { auth_profile_ids: (target.auth_profiles || []).map((p) => p.id) });
+      const budget = h("input", { type: "number", min: "0.01", step: "0.01", placeholder: "Unlimited" });
+      const turns = h("input", { type: "number", min: "1", step: "1", placeholder: "Strix default" });
+      let submitting = false;
+      const close = dialog("Verification", [
+        h("div", { class: "note" }, g.title, " · ", target.base_url),
+        h("div", { class: "help" }, "Start a separate, focused Strix run using current Vault profiles. Original evidence and remediation status are preserved."),
+        field("LLM connection", connection), extras.fields,
+        h("div", { class: "field-row two" }, field("Budget limit (USD)", budget), field("Turns per agent", turns))
+      ], [button("Cancel", { onclick: () => close() }), button("Start verification", { kind: "primary", onclick: guard(async (e) => {
+        if (submitting) return;
+        submitting = true; e.currentTarget.disabled = true;
+        try {
+          await api(`/api/findings/${gid}/verify`, { method: "POST", body: { llm_profile_id: connection.value, ...extras.value(), max_budget: budget.value, max_turns: turns.value } });
+          close(); toast("Verification started"); await pollVerifs();
+        } finally { submitting = false; if (e.currentTarget) e.currentTarget.disabled = false; }
+      }) })]);
+    });
+    const renderVerifs = (list) => {
+      const anyActive = (list || []).some((v) => v.scan && ACTIVE.includes(v.scan.status));
+      const rows = (list || []).map((v) => {
+        const active = v.scan && ACTIVE.includes(v.scan.status);
+        const res = active ? "pending" : v.result;
+        return h("div", { class: "verif" },
+          h("span", { class: `status ${VCLS[res] || "queued"}` }, h("span", { class: "dot" }), active ? (STATUS_TR[v.scan.status] || "Running") : (VLABEL[res] || res)),
+          v.scan ? h("a", { href: `#/scans/${v.scan.id}`, class: "faint" }, ` scan #${v.scan.id}`) : null,
+          h("span", { class: "faint" }, ` · ${fmtShort(v.finished_at || v.created_at)}`),
+          (v.profiles || []).length ? h("span", { class: "faint" }, " · " + v.profiles.map((p) => p.name).join(", ")) : null,
+          v.note ? h("div", { class: "note vnote" }, v.note) : null);
+      });
+      verifBox.replaceChildren(
+        h("div", { class: "verif-head" }, h("h4", {}, "Verification"),
+          button(rows.length ? "Re-verify" : "Verify", { size: "sm", ic: "refresh", disabled: anyActive, title: "Re-run Strix focused on this finding", onclick: startVerify })),
+        h("div", { class: "help" }, "Run a focused verification using current Vault profiles. Results never change remediation automatically. Fingerprint grouping is a correlation hint, not proof of the same vulnerability."),
+        rows.length ? h("div", { class: "verif-list" }, rows) : h("div", { class: "faint" }, "Not verified yet."));
+      if (anyActive && !vpoll) vpoll = setInterval(pollVerifs, 3000);
+      if (!anyActive) stopPoll();
+    };
+    const pollVerifs = async () => {
+      if (!document.body.contains(verifBox)) { stopPoll(); return; }
+      try { const full = await api(`/api/findings/${gid}`); renderVerifs(full.verifications); } catch { setConnected(false); }
+    };
+    api(`/api/findings/${gid}`).then((full) => renderVerifs(full.verifications)).catch(() => verifBox.replaceChildren(h("div", { class: "faint" }, "Could not load verifications.")));
+    return verifBox;
+}
+
 // ================================================================== deduplicated findings (dialog)
 async function findingsDialog(scanIds, campaignId) {
   const data = campaignId ? await api(`/api/campaigns/${campaignId}/findings`) : await api(`/api/targets/${scanIds}/findings`);
@@ -1241,7 +1544,7 @@ async function findingsDialog(scanIds, campaignId) {
         h("td", { class: "shrink" }, h("span", { class: `sevpill ${g.severity}` }, SEV_TR[g.severity] || g.severity)),
         h("td", {}, h("div", { class: "cell-clip" }, h("div", { class: "primary-line", title: g.title }, g.title), h("div", { class: "secondary-line mono" }, [g.method, g.endpoint].filter(Boolean).join(" ") || g.host || ""))),
         h("td", { class: "nowrap" }, h("span", { class: `rem ${g.remediation}` }, REMEDIATION_TR[g.remediation]), g.seen_after_fix ? h("span", { class: "tag danger", title: "Seen again after being marked fixed" }, "again") : null),
-        h("td", { class: "nowrap muted" }, `${g.runs}× scans`),
+        h("td", { class: "nowrap muted" }, `${g.runs} scans`),
         h("td", { class: "shrink" }, icon("chevron")), detail));
       tbody.append(detail);
     });
@@ -1252,10 +1555,11 @@ async function findingsDialog(scanIds, campaignId) {
     const remSel = select(Object.entries(REMEDIATION_TR), g.remediation);
     const note = h("input", { type: "text", value: g.remediation_note || "", placeholder: "Note (optional)" });
     const occ = h("div", { class: "faint" }, "Loading…");
+    const verifBox = verificationPanel(g.id);
     api(`/api/findings/${g.id}`).then((full) => {
       occ.replaceChildren(h("div", { class: "occ-list" }, (full.occurrences_list || []).map((o) => h("div", { class: "occ" },
         h("a", { href: `#/scans/${o.scan_id}` }, `#${o.scan_id}`), " ", h("span", { class: "mono" }, o.run_name), " ", h("span", { class: "faint" }, fmtShort(o.observed_at)), " ", h("span", { class: `sevpill ${o.severity}` }, SEV_TR[o.severity] || o.severity)))));
-    }).catch(() => occ.replaceChildren(h("div", { class: "faint" }, "Could not load occurrences.")));
+    }).catch(() => { occ.replaceChildren(h("div", { class: "faint" }, "Could not load occurrences.")); verifBox.replaceChildren(h("div", { class: "faint" }, "Could not load verifications.")); });
     return h("div", { class: "finding-body" },
       h("div", { class: "note" }, [g.cwe, g.host, `first: ${fmtShort(g.first_seen_at)}`, `last: ${fmtShort(g.last_seen_at)}`].filter(Boolean).join(" · ")),
       h("div", { class: "rem-edit" }, h("label", {}, "Remediation status"), remSel, note,
@@ -1263,16 +1567,17 @@ async function findingsDialog(scanIds, campaignId) {
           await api(`/api/findings/${g.id}`, { method: "PATCH", body: { remediation: remSel.value, remediation_note: note.value } });
           g.remediation = remSel.value; g.remediation_note = note.value; toast("Updated"); render();
         }) })),
+      verifBox,
       h("h4", {}, "Occurrences"), occ);
   }
   render();
-  const close = dialog("Deduplicated findings", groups.length ? body : emptyState("No findings", "No unique findings recorded in this scope."),
+  const close = dialog("Finding groups", groups.length ? body : emptyState("No findings", "No finding groups recorded in this scope."),
     [button("Close", { onclick: () => close() })], { wide: true });
 }
 
 // ================================================================== auth profiles (vault)
 function verifyChip(p) {
-  if (p.last_verify_ok === 1) return h("span", { class: "status completed", title: p.last_verify_note || "" }, h("span", { class: "dot" }), "Verified");
+  if (p.last_verify_ok === 1) return h("span", { class: "status completed", title: p.last_verify_note || "" }, h("span", { class: "dot" }), "Pre-check passed");
   if (p.last_verify_ok === 0) return h("span", { class: "status failed", title: p.last_verify_note || "" }, h("span", { class: "dot" }), "Failed");
   return h("span", { class: "faint" }, "—");
 }
@@ -1356,7 +1661,7 @@ async function authProfileDialog(p) {
   const foot = [];
   if (p) foot.push(button("Delete", { kind: "danger", ic: "trash", onclick: guard(async () => {
     if (!await confirmDialog("Delete profile?", "Schedules using this profile are paused. Masking in old scans is not affected.", { confirmLabel: "Delete", danger: true })) return;
-    const r = await api(`/api/auth-profiles/${p.id}`, { method: "DELETE" }); close(); toast(r.paused_schedules ? `Profile deleted, ${r.paused_schedules} schedule(s) paused` : "Profile deleted"); router();
+    const r = await api(`/api/auth-profiles/${p.id}`, { method: "DELETE" }); close(); toast(r.paused_schedules ? `Profile deleted, ${r.paused_schedules} schedules paused` : "Profile deleted"); router();
   }) }));
   if (p && p.verifiable) foot.push(button("Verify", { onclick: guard(async () => {
     const r = await api(`/api/auth-profiles/${p.id}/verify`, { method: "POST" });
@@ -1400,7 +1705,7 @@ async function viewInventory(presetTarget) {
       h("div", { class: "stats compact" }, Object.entries(KIND_ASSET_TR).map(([k, l]) => h("div", { class: "stat" },
         h("div", { class: "k" }, l), h("div", { class: "v" }, (sum.by_kind[k] || {}).total || 0),
         h("div", { class: "s" }, (sum.by_kind[k] || {}).observed ? `${(sum.by_kind[k] || {}).observed} observed` : "—")))),
-      diff ? h("div", { class: "note" }, `Last scan (${diff.scan_mode || "?"}, ${diff.complete ? "complete" : "partial"}): ` +
+      diff ? h("div", { class: "note" }, `Last scan (${MODE_TR[diff.scan_mode] || "?"}, ${diff.complete == null ? "completion unknown" : diff.complete ? "complete" : "partial"}): ` +
         Object.entries(diff.by_kind).filter(([, v]) => v.new || v.changed).map(([k, v]) => `${KIND_ASSET_TR[k]} +${v.new}${v.changed ? ` ~${v.changed}` : ""}`).join(", ") ) : null);
     const rows = d.assets.map((a) => h("tr", { class: "clickable", onclick: () => assetDialog(a) },
       h("td", {}, h("span", { class: "tag" }, KIND_ASSET_TR[a.kind] || a.kind)),

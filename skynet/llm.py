@@ -117,15 +117,15 @@ def test(p: dict[str, Any], key_override: str | None = None) -> dict[str, Any]:
     base = (p.get("base_url") or PROVIDERS.get(provider, {}).get("default_base") or "").rstrip("/")
     cafile = p.get("ca_cert_path") or None
     if not base:
-        return {"ok": False, "message": "Base URL girilmemiş.", "models": []}
+        return {"ok": False, "message": "Base URL is required.", "models": []}
     result: dict[str, Any] = {"ok": False, "models": [], "message": ""}
     try:
         if provider == "openrouter":
             info = (_get(base + "/key", key, cafile) or {}).get("data") or {}
             usage, limit = info.get("usage"), info.get("limit")
-            msg = "Anahtar geçerli."
+            msg = "API key is valid."
             if isinstance(usage, (int, float)):
-                msg += f" Kullanım: ${usage:.2f}" + (f" / limit ${limit}" if limit else "")
+                msg += f" Usage: ${usage:.2f}" + (f" / limit ${limit}" if limit else "")
             result["message"] = msg
             data = _get(base + "/models", "", cafile)
         else:
@@ -135,14 +135,14 @@ def test(p: dict[str, Any], key_override: str | None = None) -> dict[str, Any]:
                 if e.code != 404 or base.endswith("/v1"):
                     raise
                 data = _get(base + "/v1/models", key, cafile)
-            result["message"] = "Gateway erişilebilir."
+            result["message"] = "Gateway is reachable."
     except urllib.error.HTTPError as e:
         body = _scrub(e.read().decode(errors="replace")[:300], key)
         return {"ok": False, "message": f"HTTP {e.code}: {body}", "models": []}
     except urllib.error.URLError as e:
-        return {"ok": False, "message": _scrub(f"Sunucuya bağlanılamadı ({base}): {e.reason}", key), "models": []}
+        return {"ok": False, "message": _scrub(f"Could not connect to server ({base}): {e.reason}", key), "models": []}
     except (TimeoutError, ValueError, ssl.SSLError, OSError) as e:
-        return {"ok": False, "message": _scrub(f"Bağlantı hatası: {e}", key), "models": []}
+        return {"ok": False, "message": _scrub(f"Connection error: {e}", key), "models": []}
     ids = sorted({m.get("id") for m in (data or {}).get("data") or [] if isinstance(m, dict) and m.get("id")})
     result["ok"] = True
     result["models"] = ids
@@ -151,8 +151,8 @@ def test(p: dict[str, Any], key_override: str | None = None) -> dict[str, Any]:
     bare = model[len(prefix):] if prefix and model.startswith(prefix) else model
     if ids and bare:
         result["model_found"] = bare in ids
-        result["message"] += f" {len(ids)} model listelendi; seçili model " + (
-            "listede var." if bare in ids else f"'{bare}' listede YOK.")
+        result["message"] += f" {len(ids)} models listed; selected model " + (
+            "is available." if bare in ids else f"'{bare}' was not found.")
     elif not ids:
-        result["message"] += " Sağlayıcı model listesi döndürmedi."
+        result["message"] += " Provider did not return a model list."
     return result

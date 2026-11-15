@@ -34,10 +34,10 @@ from . import crypto, db, scope
 from .redact import Redactor
 
 KINDS = {
-    "anonymous": "Anonim (oturumsuz)",
-    "credentials": "Kullanıcı adı + şifre (form girişi)",
-    "header": "HTTP başlığı (Bearer token / API anahtarı)",
-    "cookie": "Oturum çerezi",
+    "anonymous": "Anonymous (no session)",
+    "credentials": "Username + password (form login)",
+    "header": "HTTP header (Bearer token / API key)",
+    "cookie": "Session cookie",
 }
 SANDBOX_DIR = "skynet_auth"
 _HEADER_NAME = re.compile(r"^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,100}$")
@@ -98,11 +98,13 @@ _global_cache: dict[str, Any] = {"sig": None, "r": Redactor()}
 
 def global_redactor(extra: list[str] | None = None) -> Redactor:
     """Masks the current secrets of every profile (cached until a profile changes) plus `extra`."""
-    sig = db.q1("SELECT COUNT(*) AS n, MAX(updated_at) AS u, MAX(secret_updated_at) AS s FROM auth_profiles")
-    key = (sig["n"], sig["u"], sig["s"]) if sig else None
+    # Timestamps have second resolution: two rotations within a second must still
+    # invalidate masking. The encrypted values are comparison metadata, never logged.
+    rows = db.q("SELECT * FROM auth_profiles ORDER BY id")
+    key = tuple((p["id"], p.get("secret_enc")) for p in rows)
     if _global_cache["sig"] != key:
         vals: list[str] = []
-        for p in db.q("SELECT * FROM auth_profiles"):
+        for p in rows:
             vals += secret_values(p)
         _global_cache.update(sig=key, vals=vals, r=Redactor(vals))
     if extra:
@@ -120,6 +122,18 @@ def scan_redactor(scan: dict[str, Any]) -> Redactor:
         except (crypto.DecryptError, ValueError):
             snap = []
     return global_redactor(snap)
+
+
+def finding_redactor(group_id: int) -> Redactor:
+    """Mask historical group metadata after rotation, even if source files were removed."""
+    values = []
+    for row in db.q("SELECT DISTINCT s.redact_enc FROM scans s JOIN finding_occurrences o ON o.scan_id=s.id "
+                    "WHERE o.group_id=? AND COALESCE(s.redact_enc,'')<>''", (group_id,)):
+        try:
+            values.extend(json.loads(crypto.vault_decrypt(row["redact_enc"]) or "[]"))
+        except (crypto.DecryptError, ValueError):
+            continue
+    return global_redactor(values)
 
 
 # ---------------------------------------------------------------- public view
@@ -149,10 +163,10 @@ def payload(body: dict[str, Any], existing: dict[str, Any] | None) -> tuple[dict
     """-> (columns, new secret dict or None to keep the stored one)."""
     name = (body.get("name") or "").strip()
     if not name:
-        raise ValueError("Profil adı zorunlu")
+        raise ValueError("Profile name is required")
     kind = body.get("kind")
     if kind not in KINDS:
-        raise ValueError("Geçersiz yöntem")
+        raise ValueError("Invalid method")
     old = {}
     if existing and existing.get("secret_enc") and existing["kind"] == kind:
         old = secrets_of(existing)  # DecryptError propagates: user must re-enter
@@ -165,14 +179,14 @@ def payload(body: dict[str, Any], existing: dict[str, Any] | None) -> tuple[dict
         cols["username"] = (body.get("username") or "").strip()
         cols["login_url"] = (body.get("login_url") or "").strip()
         if not cols["username"]:
-            raise ValueError("Kullanıcı adı zorunlu")
+            raise ValueError("Username is required")
         if cols["login_url"] and scope.split(cols["login_url"])[0] not in ("http", "https"):
-            raise ValueError("Giriş adresi http(s) olmalı")
+            raise ValueError("Login URL must use http(s)")
         pw = body.get("password") or ""
         if pw:
             secret = {"password": pw}
         elif not old.get("password"):
-            raise ValueError("Şifre zorunlu")
+            raise ValueError("Password is required")
     elif kind in ("header", "cookie"):
         items = body.get("headers" if kind == "header" else "cookies") or []
         names, values = [], {}
@@ -182,18 +196,18 @@ def payload(body: dict[str, Any], existing: dict[str, Any] | None) -> tuple[dict
             if not n:
                 continue
             if not (_HEADER_NAME if kind == "header" else _COOKIE_NAME).match(n):
-                raise ValueError(f"Geçersiz {'başlık' if kind == 'header' else 'çerez'} adı: {n}")
+                raise ValueError(f"Invalid {'header' if kind == 'header' else 'cookie'} name: {n}")
             if n.lower() in (x.lower() for x in names):
-                raise ValueError(f"Aynı ad iki kez girildi: {n}")
+                raise ValueError(f"Duplicate name: {n}")
             v = it.get("value") or ""
             if "\n" in v or "\r" in v:
-                raise ValueError("Değer satır sonu içeremez")
+                raise ValueError("Values cannot contain line breaks")
             if not v and n not in prev:
-                raise ValueError(f"“{n}” için değer girin")
+                raise ValueError(f"Enter a value for “{n}”")
             names.append(n)
             values[n] = v or prev[n]
         if not names:
-            raise ValueError("En az bir " + ("başlık" if kind == "header" else "çerez") + " girin")
+            raise ValueError("Enter at least one " + ("header" if kind == "header" else "cookie"))
         cols["header_names" if kind == "header" else "cookie_names"] = names
         if kind == "cookie":
             cols["cookie_domain"] = (body.get("cookie_domain") or "").strip().lstrip(".").lower()
@@ -202,7 +216,7 @@ def payload(body: dict[str, Any], existing: dict[str, Any] | None) -> tuple[dict
         vurl = (body.get("verify_url") or "").strip()
         if vurl:
             if scope.split(vurl)[0] not in ("http", "https"):
-                raise ValueError("Doğrulama adresi http(s) olmalı")
+                raise ValueError("Verification URL must use http(s)")
             cols["verify_url"] = vurl
             st = body.get("verify_expect_status")
             cols["verify_expect_status"] = int(st) if str(st or "").strip() else 200
@@ -210,7 +224,7 @@ def payload(body: dict[str, Any], existing: dict[str, Any] | None) -> tuple[dict
     else:  # anonymous
         secret = {}
     if existing and existing["kind"] != kind and secret is None:
-        raise ValueError("Yöntem değiştiğinde gizli değerleri yeniden girin")
+        raise ValueError("Re-enter secrets when changing the authentication method")
     return cols, secret
 
 
@@ -235,13 +249,13 @@ def resolve(target_id: int, profile_ids: list[int]) -> list[dict[str, Any]]:
     for pid in dict.fromkeys(int(x) for x in profile_ids or []):
         p = get(pid)
         if not p:
-            raise AuthError(f"Kimlik profili #{pid} silinmiş.")
+            raise AuthError(f"Authentication profile #{pid} was deleted.")
         if pid not in allowed:
-            raise AuthError(f"“{p['name']}” profili bu hedefe atanmamış.")
+            raise AuthError(f"“{p['name']}” is not assigned to this target.")
         if p["kind"] != "anonymous":
             try:
                 if not secrets_of(p):
-                    raise AuthError(f"“{p['name']}” profilinde gizli değer yok.")
+                    raise AuthError(f"“{p['name']}” has no stored secret.")
             except crypto.DecryptError as e:
                 raise AuthError(f"“{p['name']}”: {e}") from e
         out.append(p)
@@ -310,6 +324,9 @@ def render(profiles: list[dict[str, Any]], runtime_dir: Path, sid: int) -> tuple
             put("json", json.dumps({"cookies": ck, "domain": dom or None}))
             lines.append(f"- Profile “{p['name']}” (session cookie {', '.join(ck)}): `curl -H @{fh} <url>`"
                          + (f" or `curl -b {base}.cookies <url>`" if jar else "") + f"; JSON form in {base}.json.")
+        if p.get("verify_expect_text"):
+            lines.append(f"  Protected identity marker (must be present during the relevant tests, not only at "
+                         f"pre-check): {p['verify_expect_text']!r}; expected HTTP {p.get('verify_expect_status') or 200}.")
     if len(profiles) > 1:
         lines += ["", "Several roles are provided: use them to test authorization boundaries (horizontal and vertical "
                       "access control) between the profiles."]
@@ -326,18 +343,18 @@ def verify(p: dict[str, Any], target: dict[str, Any] | None = None) -> dict[str,
     """One request from the Skynet host to the profile's verification URL. Separate from the Strix scan."""
     now = db.now_iso()
     if p["kind"] == "anonymous":
-        return {"result": "not_applicable", "note": "Anonim profilde doğrulanacak oturum yok.", "at": now}
+        return {"result": "not_applicable", "note": "An anonymous profile has no session to check.", "at": now}
     if p["kind"] == "credentials":
         return {"result": "not_verifiable", "at": now,
-                "note": "Form girişini Strix ajanı yapar ve Strix girişin başarılı olup olmadığını bildirmez; Skynet doğrulayamaz."}
+                "note": "The Strix agent performs form login. Skynet cannot independently verify that the login succeeded."}
     if not p.get("verify_url"):
-        return {"result": "not_configured", "at": now, "note": "Doğrulama adresi tanımlı değil; oturumun geçerliliği bilinmiyor."}
+        return {"result": "not_configured", "at": now, "note": "No verification URL configured; session validity is unknown."}
     sch, host, port, path = scope.split(p["verify_url"])
     targets = [target] if target else db.q("SELECT t.* FROM targets t JOIN auth_profile_targets a ON a.target_id=t.id "
                                            "WHERE a.profile_id=?", (p["id"],))
     if not targets or not any(scope.label(t, host, port, path) == "in" for t in targets):
         return {"result": "blocked", "at": now,
-                "note": "Doğrulama adresi atanmış hedeflerin kapsamında değil; istek gönderilmedi."}
+                "note": "Verification URL is outside the assigned targets' scope; no request was sent."}
     try:
         sec = secrets_of(p)
     except crypto.DecryptError as e:
@@ -358,10 +375,10 @@ def verify(p: dict[str, Any], target: dict[str, Any] | None = None) -> dict[str,
         except urllib.error.HTTPError as e:
             code, body = e.code, e.read(20_000).decode("utf-8", errors="replace")
     except (urllib.error.URLError, OSError, ValueError) as e:
-        return {"result": "failed", "at": now, "note": red.text(f"İstek gönderilemedi: {getattr(e, 'reason', e)}", True)}
+        return {"result": "failed", "at": now, "note": red.text(f"Request could not be sent: {getattr(e, 'reason', e)}", True)}
     ms = int((time.time() - t0) * 1000)
     ok = code == expect and (not text or text in body)
-    why = f"HTTP {code} (beklenen {expect})" + (f", “{text}” {'bulundu' if text in body else 'bulunamadı'}" if text else "")
+    why = f"HTTP {code} (expected {expect})" + (f", “{text}” {'found' if text in body else 'not found'}" if text else "")
     return {"result": "verified" if ok else "failed", "status": code, "ms": ms, "at": now, "note": why}
 
 

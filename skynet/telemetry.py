@@ -106,6 +106,7 @@ def _parse_log(path: Path, offset: int, acc: dict[str, Any]) -> int:
             for k in ("duration_ms",):
                 if kv.get(k, "-").isdigit():
                     acc[k] += int(kv[k])
+                    acc["duration_n"] = acc.get("duration_n", 0) + 1
             if kv.get("ttft_ms", "-").isdigit():
                 acc["ttft_ms"] += int(kv["ttft_ms"]); acc["ttft_n"] += 1
             if kv.get("model"):
@@ -163,9 +164,10 @@ def _usage(run_json: dict[str, Any]) -> dict[str, Any]:
 def _cached(u: dict[str, Any]) -> int | None:
     det = u.get("input_tokens_details")
     if isinstance(det, list):
-        return sum(int((d or {}).get("cached_tokens") or 0) for d in det) or None
+        values = [d["cached_tokens"] for d in det if isinstance(d, dict) and d.get("cached_tokens") is not None]
+        return sum(int(v) for v in values) if values else None
     if isinstance(det, dict):
-        return int(det.get("cached_tokens") or 0) or None
+        return int(det["cached_tokens"]) if det.get("cached_tokens") is not None else None
     return None
 
 
@@ -173,15 +175,15 @@ def _cost(u: dict[str, Any], cost_na: bool) -> dict[str, Any]:
     c = u.get("cost")
     if c is None:
         return {"value": None, "source": "unknown",
-                "note": "Strix maliyet bilgisi yazmadı." if not cost_na else "Strix model fiyatını hesaplayamadı."}
+                "note": "Strix did not report cost information." if not cost_na else "Strix could not determine the model price."}
     c = float(c)
     if c > 0 and u.get("providers"):
-        return {"value": c, "source": "provider", "note": "Sağlayıcının bildirdiği tutar."}
+        return {"value": c, "source": "provider", "note": "Provider-reported cost."}
     if c > 0:
-        return {"value": c, "source": "estimate", "note": "LiteLLM tahmini."}
+        return {"value": c, "source": "estimate", "note": "LiteLLM estimate."}
     # c == 0
     return {"value": None, "source": "unknown",
-            "note": "Strix model fiyatını hesaplayamadı." if cost_na else "Maliyet bilgisi yok."}
+            "note": "Strix could not determine the model price." if cost_na else "No cost information available."}
 
 
 def _tokens(u: dict[str, Any]) -> dict[str, Any] | None:
@@ -200,7 +202,8 @@ def _agents(u: dict[str, Any], tools: dict[str, dict[str, int]]) -> list[dict[st
         out.append({"agent_id": aid, "name": a.get("agent_name") or aid, "model": a.get("model"),
                     "requests": a.get("requests"), "tokens": a.get("total_tokens"),
                     "cost": a.get("cost") if (a.get("cost") or 0) > 0 else None,
-                    "tools_total": sum(tc.values()), "tools": dict(sorted(tc.items(), key=lambda x: -x[1]))})
+                    "tools_total": sum(tc.values()) if aid in tools else None,
+                    "tools": dict(sorted(tc.items(), key=lambda x: -x[1]))})
     return out
 
 
@@ -215,9 +218,11 @@ def _build(run_json: dict[str, Any], acc: dict[str, Any]) -> dict[str, Any]:
             tool_totals[name] = tool_totals.get(name, 0) + n
     return {
         "available": bool(u or attempts or tool_totals or acc["last_activity_local"]),
-        "requests": {"completed": completed, "attempts": attempts, "errors": acc["llm_errors"] or None},
-        "retries": {"total": acc["retries_total"], **acc["retries"]},
-        "latency": {"avg_request_ms": round(acc["duration_ms"] / acc["llm_requests"]) if acc["llm_requests"] else None,
+        "requests": {"completed": completed, "attempts": attempts,
+                     "errors": acc["llm_errors"] if acc["llm_requests"] else None},
+        "retries": {k: v if acc.get("log_observed") else None
+                    for k, v in {"total": acc["retries_total"], **acc["retries"]}.items()},
+        "latency": {"avg_request_ms": round(acc["duration_ms"] / acc["duration_n"]) if acc.get("duration_n") else None,
                     "avg_ttft_ms": round(acc["ttft_ms"] / acc["ttft_n"]) if acc["ttft_n"] else None},
         "cost": _cost(u, acc["cost_na"]),
         "tokens": _tokens(u),
@@ -258,6 +263,7 @@ def collect(scan: dict[str, Any], run_dir: Path) -> dict[str, Any]:
         from . import runs
         rj = runs._load_json(run_dir / "run.json") or {}
         offset = _parse_log(run_dir / "strix.log", offset, acc)
+        acc["log_observed"] = (run_dir / "strix.log").is_file() and (run_dir / "strix.log").stat().st_size > 0
         max_id = _parse_tools(run_dir / ".state" / "agents.db", max_id, acc)
         pub = _build(rj, acc)
         payload = {**pub, "_acc": acc}
@@ -279,5 +285,10 @@ def get(scan_id: int) -> dict[str, Any] | None:
     if not row or not isinstance(row.get("telemetry"), dict):
         return None
     t = {k: v for k, v in row["telemetry"].items() if k != "_acc"}
+    if isinstance(t.get("cost"), dict):
+        t["cost"] = {**t["cost"], "note": {
+            "provider": "Provider-reported cost.", "estimate": "LiteLLM estimate.",
+            "unknown": "Cost information is unavailable."
+        }.get(t["cost"].get("source"), "Cost information is unavailable.")}
     t["collected_at"] = row.get("collected_at")
     return t

@@ -16,13 +16,13 @@ STATUSES = ("planned", "active", "on_hold", "completed")
 def payload(body: dict[str, Any]) -> dict[str, Any]:
     name = (body.get("name") or "").strip()
     if not name:
-        raise ValueError("Kampanya adı zorunlu")
+        raise ValueError("Campaign name is required")
     status = body.get("status") or "planned"
     if status not in STATUSES:
-        raise ValueError("Geçersiz durum")
+        raise ValueError("Invalid status")
     env = (body.get("environment") or "").strip()
     if env and env not in ("development", "test", "staging", "production"):
-        raise ValueError("Geçersiz ortam")
+        raise ValueError("Invalid environment")
     cols = {"name": name, "description": (body.get("description") or "").strip(),
             "scope": (body.get("scope") or "").strip(), "environment": env, "status": status}
     cols["completed_at"] = db.now_iso() if status == "completed" else None
@@ -81,7 +81,7 @@ def public(c: dict[str, Any], detail: bool = False) -> dict[str, Any]:
 def can_delete(c: dict[str, Any]) -> str | None:
     """Only an archived campaign may be deleted, and deletion only unlinks (scans/schedules keep running)."""
     if not c.get("archived_at"):
-        return "Önce kampanyayı arşivleyin. Silme yalnızca bağlantıları koparır; taramalar ve bulgular silinmez."
+        return "Archive the campaign first. Deleting it removes links only; scans and findings are preserved."
     return None
 
 

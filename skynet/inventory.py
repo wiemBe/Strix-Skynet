@@ -93,6 +93,7 @@ def _proxy(run_dir: Path, hmap: dict[str, str], red: Redactor) -> list[dict[str,
             f"WHERE json_extract(message_data,'$.type')='function_call' AND json_extract(message_data,'$.name') IN "
             f"({','.join('?' * len(PROXY_TOOLS))})", PROXY_TOOLS)}
         if not calls:
+            c.close()
             return []
         rows = c.execute("SELECT json_extract(message_data,'$.call_id') AS cid, json_extract(message_data,'$.output') AS out, "
                          "created_at FROM agent_messages WHERE json_extract(message_data,'$.type')='function_call_output'").fetchall()
@@ -124,8 +125,8 @@ def _proxy(run_dir: Path, hmap: dict[str, str], red: Redactor) -> list[dict[str,
                 req_host[str(q.get("id"))] = (host, port, tls)
                 scheme = "https" if tls else "http"
                 attrs = {"status": resp.get("status_code")} if resp.get("status_code") is not None else {}
-                ev = f"Caido isteği #{q.get('id')}: {q.get('method')} {q.get('path')}" + (
-                    f" → HTTP {resp['status_code']}" if resp.get("status_code") is not None else " → yanıt yok")
+                ev = f"Caido request #{q.get('id')}: {q.get('method')} {q.get('path')}" + (
+                    f" → HTTP {resp['status_code']}" if resp.get("status_code") is not None else " → no response")
                 kw = dict(source="proxy", tier="observed", ref=f"req:{q.get('id')}", at=at, evidence=red.text(ev, True))
                 out.append(_obs("host", host=host, **kw))
                 out.append(_obs("service", host=host, port=port, scheme=scheme, **kw, attrs={"tls": tls}))
@@ -152,7 +153,7 @@ def _proxy(run_dir: Path, hmap: dict[str, str], red: Redactor) -> list[dict[str,
                     if scope.valid_host(host):
                         req_host.setdefault(rid, (host, port, bool(tls)))
                         kw = dict(source="proxy", tier="observed", ref=f"req:{rid}", at=at,
-                                  evidence=red.text(f"Caido isteği #{rid}: {m.group(1)} {m.group(2).split('?')[0]}", True))
+                                  evidence=red.text(f"Caido request #{rid}: {m.group(1)} {m.group(2).split('?')[0]}", True))
                         out.append(_obs("host", host=host, **kw))
                         out.append(_obs("endpoint", host=host, port=port, scheme=scheme, method=m.group(1),
                                         path=scope.norm_path(m.group(2)), **kw))
@@ -186,7 +187,7 @@ def _proxy(run_dir: Path, hmap: dict[str, str], red: Redactor) -> list[dict[str,
                 continue
             out.append(_obs("technology", host=loc[0], name=name, version=ver, source="proxy", tier="observed",
                             ref=f"hdr:{rid}:{hn}", at=at or None, attrs={"version": ver, "header": hn},
-                            evidence=red.text(f"Yanıt başlığı {hn}: {v} (Caido isteği #{rid})", True)))
+                            evidence=red.text(f"Response header {hn}: {v} (Caido request #{rid})", True)))
     return out
 
 
@@ -219,7 +220,7 @@ def _coverage(run_dir: Path, hmap: dict[str, str], red: Redactor, at: str | None
         if not surf:
             continue
         ref = "cov:" + hashlib.sha1(surf.encode()).hexdigest()[:16]
-        ev = red.text(f"Ajan kaydı ({e.get('outcome_label') or e.get('outcome')}): {surf}", True)
+        ev = red.text(f"Agent record ({e.get('outcome_label') or e.get('outcome')}): {surf}", True)
         when = e.get("updated_at") or e.get("recorded_at") or at
         seen_hosts = set()
         for m in _URL.finditer(surf):
@@ -248,7 +249,7 @@ def _threat_models(run_dir: Path, hmap: dict[str, str], at: str | None) -> list[
         if not scope.valid_host(host):
             continue
         kw = dict(source="threat_model", tier="reported", ref=f"tm:{k}"[:200], at=(v or {}).get("written_at") or at,
-                  evidence=f"Ajanın tehdit modeli hedefi: {k}")
+                  evidence=f"Agent threat-model target: {k}")
         out.append(_obs("host", host=host, **kw))
         if port:
             out.append(_obs("service", host=host, port=port, **kw))
@@ -297,11 +298,11 @@ def _merge_attrs(obs: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _change(kind: str, old: dict[str, Any], new: dict[str, Any]) -> str | None:
     if kind == "technology" and old.get("version") and new.get("version") and old["version"] != new["version"]:
-        return f"Sürüm {old['version']} → {new['version']}"
+        return f"Version {old['version']} → {new['version']}"
     if kind == "service" and "tls" in old and "tls" in new and old["tls"] != new["tls"]:
-        return "TLS " + ("açıldı" if new["tls"] else "kapandı")
+        return "TLS " + ("enabled" if new["tls"] else "disabled")
     if kind == "endpoint" and old.get("statuses") and new.get("statuses") and not set(old["statuses"]) & set(new["statuses"]):
-        return f"HTTP yanıtı {', '.join(map(str, old['statuses']))} → {', '.join(map(str, new['statuses']))}"
+        return f"HTTP response {', '.join(map(str, old['statuses']))} → {', '.join(map(str, new['statuses']))}"
     return None
 
 

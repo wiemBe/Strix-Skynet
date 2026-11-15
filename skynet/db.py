@@ -133,12 +133,13 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "webhook_url": "",
     "api_token_enc": "",
     "admin_password_hash": "",
+    "agent_messaging": "0",                   # opt-in: start scans through the messaging bridge (see control.py)
 }
 
 JSON_COLS = {"targets", "extra_targets", "in_scope", "out_of_scope", "weekdays", "summary",
              "auth_profile_ids", "auth_profile_names", "auth_checks", "header_names", "cookie_names",
-             "attrs", "counts", "telemetry"}
-DICT_COLS = {"summary", "attrs", "counts", "telemetry"}
+             "attrs", "counts", "telemetry", "profiles", "verification_evidence"}
+DICT_COLS = {"summary", "attrs", "counts", "telemetry", "verification_evidence"}
 
 
 def now_iso() -> str:
@@ -297,8 +298,55 @@ CREATE TABLE scan_telemetry (
 );
 """
 
+# per-finding verification: a focused Strix re-run that re-tests one finding, with an evidence-based result.
+MIGRATION_2 = """
+CREATE TABLE finding_verifications (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id    INTEGER NOT NULL,
+    target_id   INTEGER,
+    scan_id     INTEGER UNIQUE,                  -- the focused Strix verification run (reuses the scans table)
+    profiles    TEXT DEFAULT '[]',               -- snapshot of auth profiles used: [{id, kind, name}] — NEVER secrets
+    result      TEXT NOT NULL DEFAULT 'pending',  -- pending | reverified | not_reproduced | inconclusive | error
+    note        TEXT DEFAULT '',
+    evidence    TEXT DEFAULT '{}',               -- renamed by migration 3 to avoid inventory column collision
+    created_at  TEXT, started_at TEXT, finished_at TEXT
+);
+CREATE INDEX idx_fverif_group ON finding_verifications(group_id);
+CREATE INDEX idx_fverif_scan ON finding_verifications(scan_id);
+"""
+
+MIGRATION_3 = """
+ALTER TABLE finding_verifications RENAME COLUMN evidence TO verification_evidence;
+ALTER TABLE finding_verifications ADD COLUMN classification_version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE finding_verifications ADD COLUMN previous_result TEXT;
+ALTER TABLE finding_verifications ADD COLUMN previous_note TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fverif_scan_unique ON finding_verifications(scan_id);
+"""
+
+# operator messages to agents of a running scan (see control.py); content is encrypted with the Vault key.
+MIGRATION_4 = """
+ALTER TABLE scans ADD COLUMN control_mode TEXT DEFAULT '';
+ALTER TABLE scans ADD COLUMN control_note TEXT DEFAULT '';
+CREATE TABLE agent_messages (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    scan_id      INTEGER NOT NULL,
+    request_id   TEXT NOT NULL UNIQUE,
+    agent_id     TEXT NOT NULL,
+    agent_name   TEXT DEFAULT '',
+    content_enc  TEXT NOT NULL,
+    state        TEXT NOT NULL DEFAULT 'sending',
+    reason       TEXT DEFAULT '',
+    created_by   TEXT DEFAULT '',
+    created_at   TEXT, accepted_at TEXT, delivered_at TEXT, updated_at TEXT
+);
+CREATE INDEX idx_agent_messages_scan ON agent_messages(scan_id);
+"""
+
 MIGRATIONS: list[tuple[int, str, str]] = [
-    (1, "kampanyalar, kimlik profilleri, bulgu tekilleştirme, envanter, telemetri", MIGRATION_1),
+    (1, "campaigns, auth profiles, finding correlation, inventory, telemetry", MIGRATION_1),
+    (2, "per-finding verification (finding_verifications)", MIGRATION_2),
+    (3, "verification evidence field and versioned conservative classification", MIGRATION_3),
+    (4, "operator messages to running agents (agent_messages, scans.control_mode)", MIGRATION_4),
 ]
 
 
@@ -315,7 +363,7 @@ def _backup(version: int) -> str:
     bdir = DATA_DIR / "backups"
     bdir.mkdir(parents=True, exist_ok=True)
     os.chmod(bdir, 0o700)
-    dest = bdir / f"skynet-pre-v{version}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.db"
+    dest = bdir / f"skynet-pre-v{version}-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.db"
     src = sqlite3.connect(DB_PATH)
     dst = sqlite3.connect(dest)
     with dst:
@@ -332,9 +380,9 @@ def migrate() -> None:
     pending = [m for m in MIGRATIONS if m[0] > current]
     if not pending:
         return
-    has_data = conn().execute("SELECT COUNT(*) FROM targets").fetchone()[0] or conn().execute(
-        "SELECT COUNT(*) FROM scans").fetchone()[0]
-    backup = _backup(pending[0][0]) if has_data else None
+    # Back up every migration, including installations containing only settings or
+    # Vault/LLM profiles. SQLite's backup API includes committed WAL data consistently.
+    backup = _backup(pending[0][0])
     for version, note, sql in pending:
         c = conn()
         c.execute("BEGIN")
@@ -366,15 +414,15 @@ def _migrate_inline_target_auth(c: sqlite3.Connection) -> None:
         secret = crypto.decrypt_strict(t.get("auth_secret_enc"))
         kind = t["auth_type"]
         payload = {"password": secret} if kind == "credentials" else {"headers": {t.get("auth_header_name") or "Authorization": secret}}
-        name, n = f"{t['name']} – {'kullanıcı' if kind == 'credentials' else 'token'}", 1
+        name, n = f"{t['name']} – {'user' if kind == 'credentials' else 'token'}", 1
         while c.execute("SELECT 1 FROM auth_profiles WHERE name=?", (name,)).fetchone():
             n += 1
-            name = f"{t['name']} – {'kullanıcı' if kind == 'credentials' else 'token'} {n}"
+            name = f"{t['name']} – {'user' if kind == 'credentials' else 'token'} {n}"
         now = now_iso()
         cur = c.execute(
             "INSERT INTO auth_profiles (name, kind, description, username, login_url, header_names, notes, secret_enc, "
             "secret_updated_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (name, kind, "Hedefteki eski kimlik doğrulama ayarından otomatik taşındı.",
+            (name, kind, "Migrated from the target's legacy authentication settings.",
              t.get("auth_username") or "" if kind == "credentials" else "", t.get("auth_login_url") or "",
              json.dumps([t.get("auth_header_name") or "Authorization"] if kind == "header" else []),
              t.get("auth_notes") or "", crypto.vault_encrypt(json.dumps(payload)) if secret else "", now, now, now))

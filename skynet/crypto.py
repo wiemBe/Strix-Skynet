@@ -13,15 +13,17 @@ Vault secrets use a sub-key derived from the master key (domain separation from 
 from __future__ import annotations
 
 import base64
+from contextlib import closing
 import hashlib
 import hmac
 import logging
 import os
+import sqlite3
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from .config import DATA_DIR, LEGACY_SECRET_KEY_FILE, SECRET_KEY, SECRET_KEY_FILE, SECRET_KEY_FILE_FROM_ENV
+from .config import DATA_DIR, DB_PATH, LEGACY_SECRET_KEY_FILE, SECRET_KEY, SECRET_KEY_FILE, SECRET_KEY_FILE_FROM_ENV
 
 log = logging.getLogger("skynet.crypto")
 _status: dict[str, object] = {}
@@ -91,6 +93,18 @@ def _load_key() -> bytes:
         _status.update(migrated_from=str(legacy), legacy_present=False)
         log.warning("encryption key moved from %s to %s (outside the data folder)", legacy, target)
         return key
+    # A missing key with existing encrypted data is a recovery problem, not a first installation.
+    # Refuse to replace it silently (also protects partially restored data directories).
+    if DB_PATH.exists():
+        with closing(sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)) as c:
+            tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            for table, column in (("llm_profiles", "api_key_enc"), ("targets", "auth_secret_enc"),
+                                  ("auth_profiles", "secret_enc"), ("scans", "redact_enc")):
+                cols = {r[1] for r in c.execute(f"PRAGMA table_info({table})")} if table in tables else set()
+                if column in cols and c.execute(f"SELECT 1 FROM {table} WHERE COALESCE({column},'')<>'' LIMIT 1").fetchone():
+                    raise RuntimeError("Encryption key is missing. A new key will not be generated while encrypted records exist. Restore the existing key.")
+            if "settings" in tables and c.execute("SELECT 1 FROM settings WHERE key='api_token_enc' AND COALESCE(value,'')<>''").fetchone():
+                raise RuntimeError("Encryption key is missing. Restore the existing key.")
     key = Fernet.generate_key()
     _write_key(target, key)
     _status["legacy_present"] = False
@@ -135,7 +149,7 @@ def decrypt_strict(token: str | None) -> str:
     try:
         return _fernet.decrypt(token.encode()).decode()
     except InvalidToken as e:
-        raise DecryptError("kayıtlı gizli değer çözülemedi (şifreleme anahtarı değişmiş olabilir)") from e
+        raise DecryptError("stored secret could not be decrypted (the encryption key may have changed)") from e
 
 
 def vault_encrypt(value: str) -> str:
@@ -148,4 +162,4 @@ def vault_decrypt(token: str | None) -> str:
     try:
         return _vault.decrypt(token.encode()).decode()
     except InvalidToken as e:
-        raise DecryptError("kimlik profili sırrı çözülemedi (şifreleme anahtarı değişmiş olabilir)") from e
+        raise DecryptError("authentication secret could not be decrypted (the encryption key may have changed)") from e
