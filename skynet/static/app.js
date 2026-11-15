@@ -435,7 +435,6 @@ function scanOptions(profiles, init) {
   const f = {
     llm_profile_id: select(profiles.map((p) => [String(p.id), `${p.name} — ${p.provider_label}${p.is_default ? " (default)" : ""}`]), String(init.llm_profile_id || (def && def.id) || "")),
     scan_mode: select([["quick", "Quick — for CI checks"], ["standard", "Standard — routine testing"], ["deep", "Deep — thorough, long and costly"]], init.scan_mode || "standard"),
-    max_budget: h("input", { type: "number", min: "0", step: "any", value: init.max_budget ?? "", placeholder: "Unlimited" }),
     max_turns: h("input", { type: "number", min: "1", step: "1", value: init.max_turns ?? "", placeholder: "Strix default" }),
     fail_on: select([["", "No gate"], ...SEV.map((s) => [s, `${SEV_TR[s]} and above`])], init.fail_on ?? "high"),
   };
@@ -449,12 +448,11 @@ function scanOptions(profiles, init) {
     h("div", { class: "field" }, h("label", {}, "LLM connection"), f.llm_profile_id, llmHelp),
     field("Scan mode", f.scan_mode),
     h("div", { class: "field-row limits" },
-      field("Budget limit (USD)", f.max_budget),
       field("Turns per agent", f.max_turns),
       field("Finding gate", f.fail_on)),
     h("div", { class: "help" }, "Finding gate: if a finding at or above the selected level is found, the result becomes “Gate failed”; used to block a release in CI."),
   ];
-  const value = () => ({ llm_profile_id: f.llm_profile_id.value, scan_mode: f.scan_mode.value, max_budget: f.max_budget.value || null, max_turns: f.max_turns.value || null, fail_on: f.fail_on.value });
+  const value = () => ({ llm_profile_id: f.llm_profile_id.value, scan_mode: f.scan_mode.value, max_turns: f.max_turns.value || null, fail_on: f.fail_on.value });
   return { fields, value, f };
 }
 
@@ -799,7 +797,6 @@ async function viewScan(id) {
     const accepting = (m.agents || []).filter((a) => a.accepting);
     compose.form.hidden = !m.available || !accepting.length;
     compose.hint.textContent = !m.available ? (ACTIVE.includes(scan.status) ? m.reason : "Messages can only be sent while a scan is running.")
-      : m.budget_paused ? "The scan is paused at its budget limit. Messages do not resume it."
       : !accepting.length ? "No agent is currently running or waiting." : "";
     compose.hint.hidden = !compose.hint.textContent;
     const sig = accepting.map((a) => `${a.id}:${a.name}:${a.status}`).join("|");
@@ -1047,7 +1044,6 @@ async function viewScan(id) {
     return h("div", { class: "grid-2" },
       h("div", { class: "card card-pad" }, h("div", { class: "card-title" }, "Parameters"), h("dl", { class: "dl" },
         h("dt", {}, "Strix targets"), h("dd", { class: "mono" }, (scan.targets || []).map((t) => h("div", {}, t))),
-        h("dt", {}, "Budget limit"), h("dd", {}, scan.max_budget ? `$${scan.max_budget}` : "Unlimited"),
         h("dt", {}, "Turns per agent"), h("dd", {}, scan.max_turns || "Strix default (500)"),
         h("dt", {}, "Finding gate"), h("dd", {}, scan.fail_on ? `${SEV_TR[scan.fail_on]} and above` : "Not set"),
         h("dt", {}, "Resumed run"), h("dd", { class: scan.resume_run ? "mono" : "faint" }, scan.resume_run || "—"),
@@ -1486,19 +1482,18 @@ function verificationPanel(gid) {
       const [target, profiles, campaigns] = await Promise.all([api(`/api/targets/${g.target_id}`), api("/api/llm-profiles"), api("/api/campaigns")]);
       const connection = select(profiles.map((p) => [String(p.id), `${p.name} · ${p.model}`]), String(target.llm_profile_id || (profiles.find((p) => p.is_default) || profiles[0] || {}).id || ""));
       const extras = scanExtras(target.auth_profiles || [], campaigns, { auth_profile_ids: (target.auth_profiles || []).map((p) => p.id) });
-      const budget = h("input", { type: "number", min: "0.01", step: "0.01", placeholder: "Unlimited" });
       const turns = h("input", { type: "number", min: "1", step: "1", placeholder: "Strix default" });
       let submitting = false;
       const close = dialog("Verification", [
         h("div", { class: "note" }, g.title, " · ", target.base_url),
         h("div", { class: "help" }, "Start a separate, focused Strix run using current Vault profiles. Original evidence and remediation status are preserved."),
         field("LLM connection", connection), extras.fields,
-        h("div", { class: "field-row two" }, field("Budget limit (USD)", budget), field("Turns per agent", turns))
+        field("Turns per agent", turns)
       ], [button("Cancel", { onclick: () => close() }), button("Start verification", { kind: "primary", onclick: guard(async (e) => {
         if (submitting) return;
         submitting = true; e.currentTarget.disabled = true;
         try {
-          await api(`/api/findings/${gid}/verify`, { method: "POST", body: { llm_profile_id: connection.value, ...extras.value(), max_budget: budget.value, max_turns: turns.value } });
+          await api(`/api/findings/${gid}/verify`, { method: "POST", body: { llm_profile_id: connection.value, ...extras.value(), max_turns: turns.value } });
           close(); toast("Verification started"); await pollVerifs();
         } finally { submitting = false; if (e.currentTarget) e.currentTarget.disabled = false; }
       }) })]);

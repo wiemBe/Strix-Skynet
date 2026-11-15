@@ -108,7 +108,7 @@ def enqueue(target: dict[str, Any], opts: dict[str, Any], trigger: str,
                 "environment": target["environment"], "targets": targets.strix_targets(target),
                 "instruction": (opts.get("instruction") or "").strip(),
                 "scan_mode": opts.get("scan_mode") or target.get("default_scan_mode") or "standard",
-                "max_budget": opts.get("max_budget"), "max_turns": opts.get("max_turns"),
+                "max_turns": opts.get("max_turns"),
                 "fail_on": opts.get("fail_on") or "",
                 "llm_profile_id": profile["id"], "llm_profile_name": profile["name"],
                 "llm_provider": profile["provider"], "model": llm.strix_model(profile),
@@ -257,8 +257,7 @@ def _launch(scan: dict[str, Any], settings: dict[str, str]) -> None:
         args.append(f"--instruction-file={instr_path}")
     if scan.get("scan_mode"):
         args.append(f"--scan-mode={scan['scan_mode']}")
-    if scan.get("max_budget"):
-        args.append(f"--max-budget={float(scan['max_budget'])}")
+    # No --max-budget: Skynet does not limit scan cost (a value stored by older versions is ignored).
     if scan.get("max_turns"):
         args.append(f"--max-turns={int(scan['max_turns'])}")
     if scan.get("fail_on"):
