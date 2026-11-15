@@ -49,7 +49,10 @@ SESSION_HOURS = int(os.environ.get("SKYNET_SESSION_HOURS", "12"))
 COOKIE_SECURE = os.environ.get("SKYNET_COOKIE_SECURE", "0") == "1"
 
 # Defaults used only on first start (afterwards everything is managed in the UI / database).
-DEFAULT_STRIX_BIN = os.environ.get("SKYNET_STRIX_BIN", str(Path.home() / ".strix" / "bin" / "strix"))
+# The bundled engine (scripts/setup_strix.sh) is preferred; otherwise a separately installed Strix CLI.
+_BUNDLED_STRIX = PROJECT_DIR / ".strix-runtime" / "bin" / "strix"
+DEFAULT_STRIX_BIN = os.environ.get("SKYNET_STRIX_BIN") or str(
+    _BUNDLED_STRIX if _BUNDLED_STRIX.is_file() else Path.home() / ".strix" / "bin" / "strix")
 DEFAULT_STRIX_WORKDIR = os.environ.get("SKYNET_STRIX_WORKDIR", str(Path.home()))
 USER_STRIX_CONFIG = Path.home() / ".strix" / "cli-config.json"
 
