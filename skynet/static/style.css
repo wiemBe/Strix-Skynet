@@ -301,7 +301,7 @@ dl.dl.stacked dt { margin-top: 12px; font-size: 13px; }
 dl.dl.stacked dt:first-child { margin-top: 0; }
 .grid-main-side { grid-template-columns: minmax(0, 1fr) 320px; }
 @media (max-width: 1180px) { .grid-main-side { grid-template-columns: minmax(0, 1fr); } }
-.field-row.limits { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.35fr); }
+.field-row.limits { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); }
 @media (max-width: 1000px) { .field-row.limits { grid-template-columns: minmax(0, 1fr); } }
 .field .check { min-height: 36px; display: inline-flex; align-items: center; gap: 8px; }
 .seg { flex-wrap: wrap; max-width: 100%; }

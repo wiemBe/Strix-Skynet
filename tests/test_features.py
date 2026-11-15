@@ -618,12 +618,13 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(self.request(f'/api/findings/{self.gid}/verify','POST',{},csrf=False)[0],403)
 
     def test_verification_options_queue_cancel_and_history(self):
-        body={"llm_profile_id":self.pid,"auth_profile_ids":[],"max_budget":0.2,"max_turns":8}
+        body={"llm_profile_id":self.pid,"auth_profile_ids":[],"max_budget":0.2,"max_turns":8}  # budget is ignored
         status,result=self.request(f'/api/findings/{self.gid}/verify','POST',body)
         self.assertEqual(status,200)
         sid=result['scan_id']
         self.assertEqual(db.get_scan(sid)['llm_profile_id'],self.pid)
         self.assertEqual(db.get_scan(sid)['max_turns'],8)
+        self.assertIsNone(db.get_scan(sid)['max_budget'])          # no cost limit is ever stored
         self.assertEqual(db.get_scan(sid)['scan_mode'],'quick')
         self.assertEqual(self.request(f'/api/findings/{self.gid}/verify','POST',body)[0],409)
         self.assertEqual(self.request(f'/api/scans/{sid}/cancel','POST',{})[0],200)
@@ -635,7 +636,7 @@ class TestAPI(unittest.TestCase):
 
     def test_invalid_inputs_do_not_create_scans(self):
         for fields in ({'auth_profile_ids':'bad'}, {'auth_profile_ids':[None]}, {'llm_profile_id':'bad'},
-                       {'max_budget':float('nan')}, {'max_budget':float('inf')}, {'max_turns':-1}):
+                       {'max_turns':float('nan')}, {'max_turns':float('inf')}, {'max_turns':-1}):
             status,_=self.request(f'/api/findings/{self.gid}/verify','POST',{'llm_profile_id':self.pid,**fields})
             self.assertEqual(status,400,fields)
         self.assertFalse(db.list_scans(target_id=self.tid))

@@ -99,7 +99,7 @@ def _num(body: dict[str, Any], k: str, typ):
         return None
     try:
         v = typ(v)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):   # int(float("inf")) raises OverflowError
         bad(f"Invalid number: {k}")
     if not math.isfinite(v) or v <= 0:
         bad(f"{k} must be greater than zero")
@@ -138,7 +138,7 @@ def _scan_opts(body: dict[str, Any], target: dict[str, Any] | None = None) -> di
         bad("Invalid authentication profile")
     return {"scan_mode": mode, "fail_on": fail_on, "llm_profile_id": int(pid), "campaign_id": cid,
             "auth_profile_ids": aids,
-            "max_budget": _num(body, "max_budget", float), "max_turns": _num(body, "max_turns", int),
+            "max_turns": _num(body, "max_turns", int),   # no budget limit: Strix runs unbounded by cost
             "instruction": (body.get("instruction") or "").strip()}
 
 
@@ -437,7 +437,7 @@ def _schedule_payload(body: dict[str, Any]) -> dict[str, Any]:
             "interval_hours": _num(body, "interval_hours", int), "cron_expr": (body.get("cron_expr") or "").strip(),
             "timezone": (body.get("timezone") or TIMEZONE).strip(), "enabled": 1 if body.get("enabled", True) else 0,
             "campaign_id": opts["campaign_id"], "auth_profile_ids": opts["auth_profile_ids"],
-            **{k: opts[k] for k in ("scan_mode", "fail_on", "llm_profile_id", "max_budget", "max_turns")}}
+            **{k: opts[k] for k in ("scan_mode", "fail_on", "llm_profile_id", "max_turns")}}
     _anchor_interval(data)
     err = scheduler.validate(data)
     if err:
@@ -574,7 +574,7 @@ def scan_resume(sid: int, body: dict[str, Any] = Body(default={})) -> dict[str, 
     t = db.get("targets", s["target_id"]) if s.get("target_id") else None
     if not t:
         bad("The scan must be linked to a target to resume it.")
-    base = {k: s.get(k) for k in ("scan_mode", "fail_on", "max_budget", "max_turns", "llm_profile_id",
+    base = {k: s.get(k) for k in ("scan_mode", "fail_on", "max_turns", "llm_profile_id",
                                   "campaign_id", "auth_profile_ids")}
     opts = _scan_opts({**base, **body}, t)
     try:
