@@ -1,0 +1,16 @@
+.git
+.env
+.env.*
+!.env.example
+.venv
+.strix-runtime*
+data
+.claude
+.codex
+.agents
+__pycache__
+**/__pycache__
+*.pyc
+docs/qa
+docs/reviews
+*.key

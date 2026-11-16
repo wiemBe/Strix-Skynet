@@ -1,0 +1,84 @@
+{
+  "date": "2026-11-15",
+  "timezone": "Europe/Istanbul",
+  "environment": "Isolated prior localhost QA history copy, no queue/scheduler/import/recovery. No new Strix or provider run.",
+  "checks": [
+    {
+      "view": "Session health",
+      "width": 1366,
+      "height": 768,
+      "scrollWidth": 1366
+    },
+    {
+      "view": "Timeline",
+      "width": 1366,
+      "height": 768,
+      "scrollWidth": 1366
+    },
+    {
+      "view": "Coverage",
+      "width": 1366,
+      "height": 768,
+      "scrollWidth": 1366
+    },
+    {
+      "view": "Comparison",
+      "width": 1366,
+      "height": 768,
+      "scrollWidth": 1366
+    },
+    {
+      "view": "Session health",
+      "width": 1920,
+      "height": 1080,
+      "scrollWidth": 1920
+    },
+    {
+      "view": "Timeline",
+      "width": 1920,
+      "height": 1080,
+      "scrollWidth": 1920
+    },
+    {
+      "view": "Coverage",
+      "width": 1920,
+      "height": 1080,
+      "scrollWidth": 1920
+    },
+    {
+      "view": "Comparison",
+      "width": 1920,
+      "height": 1080,
+      "scrollWidth": 1920
+    }
+  ],
+  "consoleErrors": [],
+  "live_fixture": {
+    "label": "QA fixture — UI polling only / no Strix process",
+    "first_batch": {
+      "inserted": 600,
+      "total_events_loaded": 603,
+      "unique_batch_texts": 600
+    },
+    "masking": {
+      "vault_addition_remasked_without_reload": true,
+      "fixture_secret_visible_after": false
+    },
+    "history_with_second_batch": {
+      "new_batch": 600,
+      "loaded_before_live_changes": 200,
+      "total_loaded_after_history_paging": 1203,
+      "total_available": 1203,
+      "fixture_secret_visible": false
+    }
+  },
+  "extra_views": [
+    "coverage-cell-1366.jpg",
+    "replay-creation-1920.jpg",
+    "coverage-filter-1920.jpg"
+  ],
+  "tests": {
+    "passed": 138,
+    "new_regression_tests": 14
+  }
+}

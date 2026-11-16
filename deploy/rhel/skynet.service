@@ -1,0 +1,32 @@
+[Unit]
+Description=Skynet pentest management console
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=simple
+User=skynet
+Group=skynet
+SupplementaryGroups=docker
+WorkingDirectory=/opt/skynet
+EnvironmentFile=/etc/skynet/skynet.env
+Environment=SKYNET_LOAD_DOTENV=0
+ExecStart=/opt/skynet/.venv/bin/python -m skynet
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=120
+KillMode=control-group
+UMask=0077
+StateDirectory=skynet skynet-keys
+StateDirectoryMode=0700
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/skynet /var/lib/skynet-keys /tmp
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+# Do not use PrivateTmp: Strix gives host temporary paths to the external Docker daemon.
+
+[Install]
+WantedBy=multi-user.target

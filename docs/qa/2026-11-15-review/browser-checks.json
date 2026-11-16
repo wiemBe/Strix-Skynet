@@ -1,0 +1,100 @@
+{
+  "environment": "Isolated copy of prior localhost QA history; no workers/scheduler/import/recovery, no new scan or provider call",
+  "checks": [
+    {
+      "view": "Coverage",
+      "heading": "Lokal test hedefi",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "view": "Session health",
+      "heading": "Lokal test hedefi",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "view": "Instructions",
+      "heading": "Lokal test hedefi",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "view": "Browser",
+      "heading": "Lokal test hedefi",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "view": "Timeline",
+      "heading": "Lokal test hedefi",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "view": "Coverage",
+      "heading": "Lokal test hedefi",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "view": "Session health",
+      "heading": "Lokal test hedefi",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "view": "Instructions",
+      "heading": "Lokal test hedefi",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "view": "Browser",
+      "heading": "Lokal test hedefi",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "view": "Timeline",
+      "heading": "Lokal test hedefi",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "view": "Evidence workspace",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "view": "Evidence workspace",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "view": "Scan comparison",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "view": "Scan comparison",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    }
+  ],
+  "consoleErrors": []
+}

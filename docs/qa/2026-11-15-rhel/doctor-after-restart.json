@@ -1,0 +1,67 @@
+{
+  "ok": true,
+  "docker_checked": false,
+  "scan_started": false,
+  "checks": [
+    {
+      "check": "platform",
+      "ok": true,
+      "detail": "Linux/x86_64 \u00b7 libc ('glibc', '2.34')"
+    },
+    {
+      "check": "python",
+      "ok": true,
+      "detail": "3.12.15"
+    },
+    {
+      "check": "timezone",
+      "ok": true,
+      "detail": "Europe/Istanbul"
+    },
+    {
+      "check": "password_hash",
+      "ok": true,
+      "detail": "True"
+    },
+    {
+      "check": "dependencies",
+      "ok": true,
+      "detail": "fastapi=0.163.0, uvicorn=0.54.0, apscheduler=3.11.3, cryptography=50.0.2, markdown-it-py=4.3.0"
+    },
+    {
+      "check": "sqlite_json",
+      "ok": true,
+      "detail": "True"
+    },
+    {
+      "check": "strix_binary",
+      "ok": true,
+      "detail": "strix 1.7.0"
+    },
+    {
+      "check": "messaging_runtime",
+      "ok": true,
+      "detail": "Strix 1.7.0; native coordinator and SDK filter available"
+    },
+    {
+      "check": "encryption",
+      "ok": true,
+      "detail": "Existing key is valid; checked 1 encrypted records without showing their contents."
+    },
+    {
+      "check": "data",
+      "ok": true,
+      "detail": "Existing directory or nearest parent is writable."
+    },
+    {
+      "check": "key_directory",
+      "ok": true,
+      "detail": "Existing directory or nearest parent is writable."
+    },
+    {
+      "check": "workdir",
+      "ok": true,
+      "detail": "Existing directory or nearest parent is writable."
+    }
+  ]
+}

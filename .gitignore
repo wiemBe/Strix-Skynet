@@ -3,6 +3,7 @@ data/
 .env
 .venv/
 .strix-runtime/
+.strix-runtime.backup-*/
 __pycache__/
 *.pyc
 .DS_Store

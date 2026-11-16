@@ -1,6 +1,98 @@
 # Skynet — çalışma takibi
 
-Güncelleme: 15 Kasım 2026 · Europe/Istanbul (son bölüm: canlı ajana mesaj)
+Güncelleme: 15 Kasım 2026 · Europe/Istanbul (son çalışma: RHEL ve tekrar QA)
+
+## Tekrar görsel QA — Codex, 15 Kasım 2026
+
+- [x] Taramanın 12 sekmesi, kanıt çalışma alanı, karşılaştırma ve dialog'lar 1366×768 / 1920×1080'de tekrar incelendi.
+- [x] Laptopta kesilen son sekme, kısalan oturum metinleri ve sıkışık hücreler düzeltildi.
+- [x] Uzun dialog gövdesi kaydırılabilir; başlık/alt eylemler viewport içinde kalıyor.
+- [x] Details talimatındaki 145px yatay taşma ve kart üst hizası düzeltildi; “Mod” etiketi “Mode” oldu.
+- [x] 41 ekran görüntüsü; son 38 ölçümde taşma/kesilen sekme/ekran dışı alt eylem ve JS konsol hatası yok.
+  Ajan filtresi, kanıt Open/Close, maskeli fark ve form Cancel etkileşimleri doğrulandı; JS/diff kontrolü geçti.
+
+Kanıtlar, kapsam ve sınırlar: [docs/qa/2026-11-15-visual-repeat/README.md](docs/qa/2026-11-15-visual-repeat/README.md).
+Yalnız izole geçmiş kopyası; yeni pentest, ajan mesajı veya asıl veri/anahtar değişikliği yok.
+
+## RHEL 9.4+ x86_64 ve tekrar QA — Codex, 15 Kasım 2026
+
+Kurulum: [docs/RHEL.md](docs/RHEL.md). Kanıtlar ve kalan sunucu kabulü:
+[docs/qa/2026-11-15-rhel/README.md](docs/qa/2026-11-15-rhel/README.md).
+
+- [x] Resmi Strix 1.7.0 Linux x86_64 wheel'i, SHA-256 doğrulaması ve platform seçimi eklendi.
+  macOS arm64 kurulumu korunuyor. İki ayrı bağımlılık kilidi; başarısız zorunlu runtime kurulumunda geri dönüş.
+- [x] RHEL Python 3.12 kurucusu, ayrı servis hesabı, tek süreç systemd birimi ve ortam örneği.
+  Kod /opt, veri /var/lib, anahtar ayrı /var/lib/skynet-keys altında. Kurucu servisi kendiliğinden başlatmaz.
+- [x] Salt okunur doctor; eksik/yanlış anahtar, Vault şifre çözme, native SDK/binary, dizin ve Docker kontrolü.
+  Taşınmış run yolları için dry-run + tutarlı yedek + idempotent relocate aracı.
+- [x] UBI 9 Linux x86_64 / glibc 2.34 / Python 3.12.15 içinde **148/148 test**; macOS'ta **148/148**.
+  Linux testleri UID 1001, güncel kod salt okunur mount ile çalıştı. systemd-analyze verify geçti.
+- [x] Gerçek HTTP sunucusunda login/CSRF, hedef, Vault, kampanya, devre dışı zamanlama ve restart kalıcılığı.
+  Restart aynı 0600 anahtarı korudu; doctor mevcut şifreli Vault kaydını doğruladı. Tarama başlatılmadı.
+- [x] Linux sunucusundan 12 görünüm × 1366×768 ve 1920×1080; ekran görüntüleri ve DOM ölçümleri kaydedildi.
+  Sayfa genelinde yatay taşma ve JS konsol hatası yok. İndirme menüsü İngilizceye tamamlandı.
+- [x] Aşağıdaki tarihsel “gövdesiz GET” kusuru kapatıldı: yalnız Caido aracı açıkça tamamlandı dediğinde,
+  geçerli Host/başlıkları olan ve gövde beklemeyen istek kabul edilir. Eksik/truncated gövde, Transfer-Encoding,
+  belirsiz Content-Length ve kısmi yanıt reddedilir. İki regresyon testi eklendi. Verify sonuç kuralları ve
+  classification_version=2 değişmedi; eski inconclusive sonuçlar yeniden yazılmadı. Evidence aynı parser'ı kullanır.
+- [ ] Gerçek RHEL sunucusunda systemd boot, SELinux enforcing, Docker sandbox ve izinli hedefle uçtan uca tarama.
+  UBI testi bunların yerine geçmez; QA konteynerine host Docker soketi verilmedi, doctor Docker kontrolü atlandı.
+
+Asıl data/anahtar değiştirilmedi; yeni migration, dış hedef taraması, commit veya production deploy yapılmadı.
+SKY özelliklerinin aşağıda belirtilen diğer sınırları (browser yalnız metadata vb.) devam ediyor.
+
+## R1–R6 düzeltmeleri — tamamlandı (Codex, 15 Kasım 2026)
+
+Aşağıdaki ilk incelemede bulunan altı kusur düzeltildi.
+Ayrıntı: [docs/reviews/2026-11-15-sky-fixes.md](docs/reviews/2026-11-15-sky-fixes.md).
+
+- [x] R1 — Vault ekleme/rotasyonunda timeline cache ve istemci metinleri güncel maskeleme bağlamıyla yenileniyor.
+- [x] R2 — Coverage/compare scheme, host ve port ayrımını koruyor; belirsiz origin'ler birleşmiyor.
+- [x] R3 — Trafik sayısı ve ajan beyanı Tested yapmıyor; aynı taramanın kabul edilmiş, ilgili kanıtlara bağlı Verify kaydı gerekiyor. Desteklenmeyen test kategorileri partial/unknown.
+- [x] R4 — Coverage başlangıç olayına sonradan öğrenilen outcome yazılmıyor.
+- [x] R5 — Sırası belirlenemeyen çelişkili oturum sinyalleri Unknown; zaman hassasiyeti ve saat dilimi gözetiliyor.
+- [x] R6 — Büyük canlı parti kayıpsız sayfalanıyor; güncellenen olaylar ve filtre dışına çıkan kayıtlar yenileniyor. Restart, geç olaylar ve geçmiş sayfalaması ele alındı.
+- [x] 138/138 test geçti; 14 yeni regresyon ilk durumda hataları yakalayıp düzeltmelerle geçti.
+- [x] 1366×768 ve 1920×1080 görsel QA; dört etkilenen görünümde yatay taşma/konsol hatası yok.
+- [x] Browser canlı QA fikstüründe 600 olayın tamamı geldi, yeni Vault test sırrı otomatik maskelendi;
+  ikinci parti ve geçmiş okuma birlikte 1203/1203 kayda ulaştı. Fikstürde Strix/LLM çalışmadı.
+
+Kanıtlar: [docs/qa/2026-11-15-fixes](docs/qa/2026-11-15-fixes).
+Yeni migration/production değişikliği/commit yapılmadı. Önceki özelliklerin diğer bilinen sınırları devam ediyor.
+
+## İlk bağımsız inceleme — tarihsel bulgular (Codex, 15 Kasım 2026)
+
+Bu altı bulgunun düzeltmeleri ve son doğrulama yukarıdaki R1–R6 bölümünde kayıtlıdır.
+
+**Aşağıdaki önceki “yedi özellik tamamlandı” kaydı nihai kabul olarak okunmamalı.**
+Güncel inceleme: [docs/reviews/2026-11-15-sky-review.md](docs/reviews/2026-11-15-sky-review.md).
+124 mevcut test geçti; ek izole senaryolar üç P1 ve üç P2 kusur üretti. Uygulama kodu bu incelemede düzeltilmedi.
+
+- [ ] R1/P1 — Timeline cache, Vault ekleme/rotasyon sonrasında güncel sırları yeniden maskelemiyor.
+- [ ] R2/P1 — Coverage kimliği host/port'u atıyor; başka origin'in kanıtı hedefe test atfedebiliyor.
+- [ ] R3/P1 — Aynı endpoint'e iki sıradan istek, ilgisiz test kategorisini Tested yapabiliyor.
+- [ ] R4/P2 — Coverage'ın güncel outcome'u geçmiş recorded_at olayına taşınıyor; replay geçmişi çarpıtıyor.
+- [ ] R5/P2 — Aynı kaynak zamanındaki çelişkili oturum kanıtında request ID kesin durum seçiyor.
+- [ ] R6/P2 — 500'den büyük canlı olay partisinin kalanı cursor ilerlemesiyle atlanabiliyor.
+
+Kanıt betiği: `.venv/bin/python docs/reviews/reproduce_sky_issues.py` (yalnız geçici fixture verisi).
+Görsel QA: yedi görünüm × 1366×768 ve 1920×1080, sayfa genelinde yatay taşma/konsol hatası görülmedi;
+[docs/qa/2026-11-15-review](docs/qa/2026-11-15-review). Tarayıcı görünümü yalnız metadata;
+tam canlı görüntü özelliği değildir. Yeni Strix/LLM taraması ve asıl DB migration'ı yapılmadı.
+
+## Yeni kabul edilen geliştirme kapsamı — 15 Kasım 2026
+
+Kullanıcının seçimiyle [docs/FEATURE_BACKLOG.md](docs/FEATURE_BACKLOG.md) eklendi. Yedi özellik aynı gün uygulandı;
+ayrıntılı kayıt aşağıdaki **"SKY-01…07 — uygulandı"** bölümünde. İşaret = kabul ölçütleri fikstür testleri ve
+yerel kayıtlı gerçek verilerle doğrulandı; yeni bir Strix/LLM taraması bu özellikler için çalıştırılmadı.
+
+- [x] SKY-01 — Tarama karşılaştırması (sürüm/build/commit Skynet'te kayıtlı değil → "Scan comparison" etiketi).
+- [x] SKY-02 — Profil × ajan bazında, an'a ve kanıta bağlı oturum sağlığı.
+- [x] SKY-03 — Endpoint × rol × test türü kanıta bağlı kapsam matrisi (WSTG v4.2 eşlemesi sezgisel).
+- [x] SKY-04 — Talimat merkezi: kabul / bağlamda / uygulama ayrımı, talimattan sonraki ajan aktivitesi.
+- [x] SKY-05 — Tarayıcı görünümü: canlı akış yok (Strix desteklemiyor); görüntüler maskelenemediği için gösterilmiyor, yalnız metadata.
+- [x] SKY-06 — Ortak zaman çizelgesi ve yalnız kayıtları okuyan replay.
+- [x] SKY-07 — Kanıt çalışma alanı: yan yana kayıtlar, maskeli fark, analist rolleri/notları (yalnız ekleme).
 
 Bu dosya ürün kararlarıyla kodda doğrulanmış durumu ayırır. `HANDOFF.md` önceki oturumun notudur;
 buradaki sonuçlar kaynak kodu, izole testler ve yerel tarayıcı kontrollerinden gelir.
@@ -159,3 +251,151 @@ içe aktarma, backfill, recovery kapalı), Settings'te messaging açık. Hedef y
   yeniden yazımda düşebilir. Ajan o noktada failed/crashed olur; mesaj çökmeden önceki çağrılarda bağlamdaydı,
   ama `--resume` geçmişinde görünmeyebilir. Bağlam sıkıştırması (`maybe_compact`) modeli doğrudan çağırır,
   filtreden geçmez; özetleyiciye mesaj enjekte edilmez.
+
+## SKY-01…07 — uygulandı (Claude, 15 Kasım 2026)
+
+Kaynak: [docs/FEATURE_BACKLOG.md](docs/FEATURE_BACKLOG.md). Önce güncel kod, testler ve yerel gerçek çalışma
+çıktıları incelendi; mevcut mesajlaşma, Verify ve envanter yeniden yazılmadı. Strix orkestrasyonuna dokunulmadı.
+
+### Ortak altyapı ve doğrulanan gerçekler
+
+- `skynet/evidence.py`: ajanların Caido araçlarıyla kaydettiği istek/yanıtlar için tek salt-okur çıkarıcı.
+  `view_request` tam istek/yanıt verir; `list_requests` yalnız metadata; `repeat_request`/`send_request` yeni
+  Caido kimliği döndürmez (Strix 1.7 kaynağında doğrulandı), kanıt kaydı sayılmaz. Kimlikler çalışma adıyla kapsanır.
+- **Gerçek veride bulunan iki tuzak:** (1) Strix oturumu yeniden yazarken `agents.db` satır id'leri ve
+  `created_at` değişir (dış bir geçmiş çalışmada 240 öğe aynı saniyede) → olay kimlikleri call_id / içerik özetiyle
+  kurulur, "yeniden yazılmış" zamanlar kullanılmaz. (2) Caido `created_at` saat dilimsiz ve UTC değil (yerel
+  çalışmada 21:41:41 GMT için 00:41:41) → dilim aynı çalışmadaki GMT `Date` başlıklarından türetilir, türetilemezse
+  Caido zamanı "bilinmiyor" sayılır.
+- Caido'nun gövdesiz GET isteği görünümünde boş satır ayırıcısı yok. Çıkarıcı, araç "tam" dediği (has_more=false)
+  mesajı kabul eder. `verify._http` aynı nedenle bu istekleri reddediyor; Verify sınıflandırması değiştirilmedi
+  (aşağıda "Kalanlar").
+- Migration 5 (mevcut backup yolu ile): `analyst_notes`, `analyst_note_revisions` (şifreli), `evidence_labels`,
+  `occurrence_reviews` (hepsi yalnız ekleme), `scans.auth_snapshot` (taramaya başlarken profil bağlama HMAC
+  özetleri + sır olmayan metadata; API'de gösterilmez).
+- `activity.read` düzeltmesi: `view_image` çıktısındaki base64 görüntü daha önce metin olarak canlı akışa
+  kırpılarak veriliyordu; artık yer tutucu metinle değiştiriliyor.
+
+### SKY-02 — Oturum sağlığı (`skynet/session_health.py`, sekme "Session health")
+
+1. Davranış: her profil için ajan bazında Session verified / Session lost / Unknown / Not applicable, kanıt zamanı +
+   zaman kaynağı (Caido isteği / ajan oturumuna kayıt), kanıt kaydına açılan "Open". Ön kontrol ayrı satırda,
+   "tarama sırasındaki oturumun kanıtı değildir" etiketiyle. Profil düzeyinde tek genel hüküm verilmez.
+2. Kanıt yolu: tam istek/yanıt; istek profilin kimlik bilgisini taşıyor mu → HMAC özet karşılaştırması
+   (`verify._binding`). Kimlik işaretçisi + beklenen durum = verified; 401 veya login'e yönlendirme = lost;
+   403 = yetki reddi (oturum kaybı değil); işaretçisiz 200 = kanıt yok. Eski taramalarda profil sırrı tarama
+   başlangıcından beri değişmediyse güncel profil kullanılır, değiştiyse "karşılaştırılamaz". Form-login →
+   Unknown (ajanın aldığı oturum çerezi bilinmez). **Ajan atfı = yanıtı Caido'da görüntüleyen ajan**; Caido
+   paylaşımlı olduğu için isteği gönderen ajan ayrıca bilinmez. Periyodik aktif kontrol eklenmedi.
+3. Testler (fikstür): ön kontrol başarılı → sonra 401 → a1 lost, a2 verified; 403/işaretçisiz 200; login
+   yönlendirmesi; başka token; form-login/anonim; eksik sayfa; form-login negatif Verify → inconclusive; çıktıda sır
+   ve özet yok. Gerçek kayıt: tarama 17'de kök ajan verified (/api/me), doğrulayıcı ajan Unknown (gerekçeli).
+
+### SKY-03 — Kanıtlı kapsam (`skynet/coverage_matrix.py`, sekme "Coverage")
+
+1. Davranış: endpoint × rol × test türü tablosu; filtreler ve durum sayaçları; hücre ayrıntısında Skynet gerekçesi,
+   kaynak coverage kaydı (değiştirilmemiş metin), kanıt kayıtları, ajanlar, zaman. "Tested" güvenli demek değildir.
+2. Kurallar: Tested = coverage kaydı testi bildiriyor **ve** o endpoint+rol için en az iki farklı tam istek/yanıt;
+   tek kayıt veya yalnız liste metadatası → Partially tested; hepsi 401/403 → Access blocked; kaydı/isteği olmayan
+   gözlenen endpoint → Not tested (kayıt yokluğunun gönderilmediğini kanıtlamadığı yazılı); not_applicable →
+   ajanın gerekçesiyle; geri kalan → Unknown. Rol = Vault profil referansı (sır yok) / anonymous / unattributed.
+   Test türü = OWASP WSTG v4.2 kategori kimliği, serbest metin risk alanından **sezgisel** eşleme; uyumluluk iddiası yok.
+3. Testler: durumların kanıt gerektirmesi, her Tested hücresinin bu çalışmanın tam kayıtlarına gitmesi, coverage.json
+   özetinin değişmemesi, iddia tek başına/tek istek ≠ Tested, anonim trafik, eksik dosya. Gerçek kayıt: tarama 17.
+
+### SKY-01 — Tarama karşılaştırması (`skynet/compare.py`, hedef sayfası → "Compare scans")
+
+1. Davranış: referans ve karşılaştırma taraması seçilir; bulgular (yeni gözlem / tekrar görülen / bu çalışmada
+   gözlenmeyen), endpoint'ler (yeni / gözlenmeyen / "Not tested in this run"), kapsam hücresi değişimleri ve
+   `inventory.run_diff` özeti. Uyarılar: tamamlanmamış/iptal tarama, eksik coverage, mod/profil/hedef/talimat farkı,
+   doğrulama çalışması, aynı Strix çalışması. Skor yok. Sürüm/build/commit kaydı olmadığı açıkça yazılır.
+2. Okuma anında hesaplanır, hiçbir şey kalıcı yazılmaz; giderilme durumu değişmez. Eşleşme varsayılan olarak
+   "Fingerprint candidate"; iki occurrence da analistçe onaylandıysa "Match confirmed by analyst". Farklı hedef reddedilir.
+   Kapsam araması yöntem bazında (OPTIONS satırı GET'in durumunu almaz).
+3. Testler: bulunmayan bulgu `open` kalır; iptal + eksik coverage + mod/profil farkı uyarıları; anahtarlarda skor yok;
+   iki kez yeniden içe aktarma → aynı çıktı ve aynı satır sayıları; analist onayı; "Not tested in this run";
+   yöntem bazlı arama; farklı hedef. Gerçek kayıt: 17 ↔ 21 (21'in coverage kaydı eksik uyarısı, bulgu Open kalır).
+
+### SKY-04 — Talimat merkezi (sekme "Instructions"; `control.py` genişletildi)
+
+1. Davranış: ajan filtresi; her talimatta Sent / Accepted by Strix / Added to agent context zamanları;
+   "Accepted, ended before reaching context" ayrı; bağlamdaki mesajda "Application not confirmed". "Agent activity
+   after this instruction" o ajanın oturumunda talimat işaretinden sonraki görünür aktiviteyi gösterir; zaman
+   sırasının neden-sonuç kanıtı olmadığı yazılı. Gönderim hâlâ Live activity composer'ından (değiştirilmedi).
+2. İşaret konumu her seferinde ajanın kendi oturumunda `[Operator message via Skynet console | id=…]` aranarak
+   bulunur (yeniden yazmaya dayanıklı). Messaging kapalı / motor uyumsuz / tarama bitmiş gerekçesi gösterilir.
+3. Testler: işaret yalnız hedef ajanda bulunur, sonraki aktivite yalnız o ajandan ve işaretten sonra; kabul edilip
+   biten ≠ bağlamda; teslim edilmemiş mesajda aktivite yok; geçmişte sır maskeli. Eski 21 mesajlaşma testi geçiyor.
+   Gerçek kayıt: tarama 21'in iki gerçek operatör mesajı (işaretler gerçek agents.db'de bulundu).
+
+### SKY-05 — Tarayıcı görünümü (`skynet/browser.py`, sekme "Browser")
+
+1. Davranış: ajan seçimi; durum No screenshot recorded / Latest screenshot (≤120 sn, tarama sürerken) / Stale /
+   Recorded; son kayıt metadata'sı (ajan, oturuma kayıt zamanı, sandbox dosya yolu, boyut). Ajan değişince eski
+   görünüm hemen temizlenir; geç gelen eski yanıt atılır. Bağlantı koparsa "Connection lost" gösterilir.
+2. Strix 1.7 kaynağı: canlı akış/CDP/ekran görüntüsü API'si yok; görüntü yalnız ajan `view_image` ile yüklerse
+   `agents.db`'de saklanır, eskileri Strix siler. **Görüntü pikselleri hiçbir yerde sunulmuyor**: metin maskeleyici
+   görüntüdeki kimlik bilgisini/kişisel veriyi bulamaz. "Live" etiketi hiçbir zaman gösterilmez.
+3. Testler: görüntü baytları browser/activity/timeline çıktısında yok; a1'in görüntüsü a2'ye verilmez; tazelik
+   eşikleri; okuma hiçbir runner/control/HTTP çağrısı yapmaz. Yerel gerçek çalışmalarda görüntü kaydı yok.
+
+### SKY-06 — Zaman çizelgesi ve replay (`skynet/timeline.py`, sekme "Timeline")
+
+1. Davranış: tür/ajan/metin filtreleri, 200'lük sayfalama, canlı takip (anahtarla birleştirme, geç gelen eski
+   zamanlı olay için yeniden okuma), replay (oynat/duraklat, adım, hız, konum; tüm geçmiş en fazla 5000 olay).
+   Replay konumu değişince hiçbir API isteği atılmaz (tarayıcıda ölçüldü).
+2. Kaynaklar: ajan mesajları, araç çağrı/sonuçları, Caido istekleri, oturum kanıtı, operatör talimatı aşamaları,
+   bulgular, coverage kayıtları, tarama yaşam döngüsü. Her olayda kaynak zamanı türü; zamansızlar "Timestamp
+   unavailable" ile sonda; aynı zamanlılar işaretli. Yeniden yazma tespiti sezgisel (oturumda aynı saniyede ≥25 öğe).
+3. Testler: oturum yeniden yazılınca aynı anahtarlar ve zaman "yok"; tekrar okuma çoğaltmaz; sıra dışı/aynı zaman/
+   zamansız; sayfalama çakışmasız; ajan filtresi; maskeleme; okuma/replay hiçbir şey çalıştırmaz; katı maskelemenin
+   anahtarları birleştirmemesi (QA'da yakalanan hata).
+
+### SKY-07 — Kanıt çalışma alanı (`skynet/workspace.py`, `#/findings/{id}`; Verification panelinden açılır)
+
+1. Davranış: bağlam = occurrence veya doğrulama çalışması; sol/sağ seçilebilir kayıtlar (istek+yanıt, tamlık,
+   görüntüleyen ajan, Caido zamanı), maskeli fark (istek/yanıt), maskeli indirme, rol atama (attack/control/
+   context — "Assigned by analyst"), occurrence eşleşmesini onayla/reddet, revizyon geçmişli analist notları.
+2. Rol kaynağı her zaman yazılı: Strix bağlantısı (rol vermez, Skynet eşleştirmez) / doğrulama değerlendirmesi
+   (ajan beyanı) / analist. Eksik kayıt, eksik klasör, eksik bulgu "Evidence gap" olarak gösterilir. Notlar şifreli,
+   gösterimde maskeli; HTML metin olarak gösterilir. Bulguya bağlı ekran görüntüsü kaynağı yok.
+3. Testler: Strix bağlantıları eşleştirilmez, eksik kimlik açık; not/rol/inceleme sonrası occurrence, grup,
+   doğrulama satırları ve çalışma dosyalarının özetleri aynı; not revizyonları ve şifreleme; fark/indirme maskeli,
+   başka çalışmaya erişim yok; yeniden içe aktarma notları korur ve çoğaltmaz; yeni doğrulama eskisinin bağlamını
+   değiştirmez; eksik klasör; API CSRF. Gerçek kayıt: bulgu 1 (`vuln-0001`, 4 bağlı tam kayıt, token maskeli).
+
+### Testler, görsel QA, ortam
+
+- `.venv/bin/python -m unittest discover -s tests` → **124/124** (87 önceki + 37 yeni `tests/test_sky.py`;
+  hepsi fikstür). Python derleme, `node --check` (app.js, sky.js) ve `git diff --check` geçti.
+- Görsel QA: 7 görünüm × 1366×768 ve 1920×1080, yatay taşma yok, JS hatası yok:
+  [docs/qa/2026-11-15-sky](docs/qa/2026-11-15-sky) (`browser-checks.json` düzeltilen 9 kusuru listeler).
+  Ortam: önceki Claude QA veritabanının scratchpad'de SQLite backup API ile alınmış kopyası, kuyruk/zamanlayıcı/
+  içe aktarma/kurtarma kapalı sunucu (127.0.0.1:8792). Asıl `data/` ve önceki QA kopyalarına dokunulmadı.
+  Yeni Strix taraması veya LLM çağrısı yapılmadı; dış hedeflerin geçmişi yalnız yapı (satır sayısı/biçim) için okundu.
+- Commit yapılmadı.
+
+### Danışman incelemesi sonrası düzeltmeler (aynı gün)
+
+- SKY-03: kayıtlar artık yalnız ait oldukları coverage kaydına sayılır (kaydı yazan ajan, yazılmadan önce görüntülemiş
+  olmalı; `reported` kayıtta anılan bulgunun `http_exchange_ids`). Birleşen hücrede her kaydın kendi değerlendirmesi
+  görünür ("Tested · 1 of 2 records"). Gerçek veride path-alias iddiası artık "Partially tested".
+- SKY-02: sinyal zamanı Caido → yanıt `Date` başlığı → görüntüleme zamanı; çelişen sinyaller yalnız görüntüleme
+  zamanıyla sıralanıyorsa durum Unknown. Tablo başlığı "Recorded by".
+- Canlı yol **QA fikstürüyle** çalıştırıldı (scratchpad'de tarama 17 çıktısının kopyası, `running` tarama #23, kopya
+  agents.db'ye satır ekleme; Strix/LLM yok): kök ajan 5 sn içinde Session lost oldu, diğer ajan etkilenmedi; zaman
+  çizelgesinde canlı ve eski zamanlı geç olay tam bir kez geldi (Skynet ilk görülme zamanı ile `seen_after`);
+  Browser Stale → Latest screenshot (sentetik 1×1 PNG, DOM'da görüntü verisi yok). Ekran: `live-session-lost-1366.jpg`.
+- Yeniden yazma koruması evidence/browser'a da uygulandı. Performans (en büyük yerel geçmiş, 8316 olay): zaman
+  çizelgesi ilk oluşturma 2.0 sn, sonraki sayfa ~1 ms; pahalı canlı oluşturmalar seyreltilir, replay DOM'u ≤500 satır.
+- `auth_snapshot` süreç başlatılmadan önce hesaplanıyor; talimat aktivitesinde "Load more". Konsolda hata yok.
+
+### Kalanlar ve sınırlar
+
+- [x] **Sonraki QA'da kapatıldı:** `verify._http` gövdesiz Caido isteklerini reddediyordu. Güncel düzeltme
+      yukarıdaki RHEL/QA bölümünde; Verify sonuç kuralları/sürümü değiştirilmeden parser onarıldı.
+- [ ] Bu özelliklerle yeni bir gerçek Strix taraması (`auth_snapshot` ile başlayan ilk tarama) çalıştırılmadı;
+      canlı görünümler yalnız QA fikstürüyle doğrulandı. Karşılaştırmadaki kapsam değişimi satırları kanıta bağlanmıyor.
+- [ ] Ekran görüntülerini göstermek için görsel maskeleme veya kullanıcının açıkça kabul ettiği bir erişim politikası yok.
+- Sürüm/build/commit alanı eklenmedi (kaynak yok). WSTG eşlemesi ve yeniden yazma tespiti sezgiseldir.
+- Production'a alma ve asıl kurulumda migration 5 yapılmadı.

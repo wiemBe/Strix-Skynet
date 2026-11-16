@@ -21,6 +21,7 @@ run its own pre-check (header/cookie profiles with a verification URL); that is 
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import ssl
 import time
@@ -94,6 +95,13 @@ def schedules_using(pid: int, target_ids: list[int] | None = None) -> list[dict[
 
 
 _global_cache: dict[str, Any] = {"sig": None, "r": Redactor()}
+
+
+def masking_revision(scan: dict[str, Any]) -> str:
+    """Opaque revision of masking inputs, including same-second rotations. No plaintext secret is hashed or sent."""
+    rows = db.q("SELECT id, secret_enc FROM auth_profiles ORDER BY id")
+    data = [(p["id"], p.get("secret_enc")) for p in rows]
+    return hashlib.sha256(json.dumps([data, scan.get("redact_enc")], sort_keys=True).encode()).hexdigest()
 
 
 def global_redactor(extra: list[str] | None = None) -> Redactor:

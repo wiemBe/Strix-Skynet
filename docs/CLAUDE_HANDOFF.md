@@ -1,5 +1,28 @@
 # Claude'a devir — Skynet
 
+> **Son görsel QA tekrarı:** [rapor ve ekranlar](qa/2026-11-15-visual-repeat/README.md).
+> Laptop sekmeleri, oturum metinleri, dialog alt eylemleri, Details taşması/hizası ve Mode etiketi düzeltildi.
+> İki viewport yeniden incelendi; son 38 ölçümde görsel taşma/kesilme ve konsol hatası yok. İş mantığı değişmedi.
+
+> **En güncel çalışma:** RHEL 9.4+ x86_64 hazırlığı ve tekrar QA tamamlandı.
+> [RHEL kurulum rehberi](RHEL.md), [kanıtlar ve sınırlar](qa/2026-11-15-rhel/README.md).
+> UBI 9 x86_64 ve macOS'ta 148 test geçti. Gövdesiz GET parser kusuru kapatıldı; Verify kuralları/sürümü
+> değişmedi, eski sonuçlar korunuyor. Gerçek RHEL systemd/SELinux/Docker sandbox kabulü henüz yapılmadı.
+> Asıl data/anahtar ve mevcut değişiklikler korunuyor; commit/deploy yapılmadı.
+
+> **Son düzeltmeler:** [R1–R6 düzeltme raporu](reviews/2026-11-15-sky-fixes.md).
+> Altı inceleme kusuru düzeltildi; 138 test geçti ve iki viewport QA tamamlandı.
+> Yeni, daha sıkı Tested kuralını ve kalan ayrı kabul çalışmalarını bu rapordan okuyun.
+
+> **En son inceleme:** [2026-11-15-sky-review.md](reviews/2026-11-15-sky-review.md).
+> İlk incelemede 124 test geçmesine rağmen üç P1 ve üç P2 kusur bulunmuştu; bunlar yukarıdaki düzeltmeyle kapatıldı.
+> Yeni özellikleri tamamlanmış kabul etmeden önce bu raporu ve tekrar üretim betiğini incele.
+
+> **Yeni ürün kapsamı (15 Kasım 2026):** Kullanıcı yedi özellik seçti.
+> Önce [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md) dosyasını oku; amaçlar, beklenen davranışlar ve kabul ölçütleri orada.
+> Bunlar geliştirilecek işlerdir. Mevcut mesajlaşmayı yeniden yazma; kaynak ve testlerden gerçek durumu doğrula.
+> **Güncel (15 Kasım 2026, sonra):** yedi özellik uygulandı; durum, testler ve kalanlar PROGRESS.md "SKY-01…07" bölümünde.
+
 > **Güncel değil:** Bu devirdeki "son özellik henüz uygulanmadı" notu artık geçerli değil. Canlı ajana mesaj
 > özelliği 15 Kasım 2026'da farklı bir teslim yoluyla uygulandı; durum ve kalan doğrulamalar için
 > [PROGRESS.md](../PROGRESS.md) içindeki "Canlı ajana prompt gönderme" bölümüne bakın.

@@ -222,15 +222,26 @@ def _decoded(raw: Any) -> Any:
     return raw
 
 
-def _http(content: Any, response: bool = False) -> dict[str, Any] | None:
+def _http(content: Any, response: bool = False, complete_request: bool = False) -> dict[str, Any] | None:
     if not isinstance(content, str):
         return None
     content = content.replace("\r\n", "\n")
     head, sep, body = content.partition("\n\n")
     lines = head.splitlines()
-    if not lines or not sep:
-        return None  # partial/truncated headers are insufficient
+    if not lines:
+        return None
     headers = {k.strip().lower(): v.strip() for ln in lines[1:] if ":" in ln for k, v in [ln.split(":", 1)]}
+    if not sep:
+        # Caido omits the empty separator for complete, bodiless request views. This exception needs an
+        # explicit completed tool page and valid body framing; it never applies to responses or partial pages.
+        length = headers.get("content-length")
+        if (response or not complete_request or not re.match(r"^[A-Z]+\s+\S+\s+HTTP/", lines[0])
+                or not all(re.match(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+:", ln) for ln in lines[1:])
+                or "transfer-encoding" in headers or (length is not None and not re.fullmatch(r"0+", length))
+                or sum(ln.lower().startswith("content-length:") for ln in lines[1:]) > 1
+                or not headers.get("host")):
+            return None
+        body = ""
     if response:
         m = re.match(r"^HTTP/\S+\s+(\d{3})\b", lines[0])
         return {"status": int(m[1]), "headers": headers, "body": body} if m else None
@@ -274,7 +285,7 @@ def _evidence(run_dir: Path, group_id: int) -> tuple[dict[str, Any] | None, dict
                 continue
             if out.get("truncated") or out.get("has_more"):
                 continue
-            data = _http(out.get("content"), part == "response")
+            data = _http(out.get("content"), part == "response", complete_request=out.get("has_more") is False)
             if data:
                 rec = records.setdefault(rid, {})
                 rec[part] = data

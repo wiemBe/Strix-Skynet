@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "mode": "verify",
+  "ids": {
+    "target": 1,
+    "auth": 1,
+    "campaign": 1,
+    "schedule": 1,
+    "provider": 1
+  },
+  "schema_version": 5,
+  "secret_readable": true,
+  "secret_returned": false,
+  "schedules_enabled": false,
+  "scans_started": 0,
+  "provider_calls": 0
+}

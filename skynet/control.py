@@ -271,9 +271,59 @@ def out_row(row: dict[str, Any] | None, redactor: Any = None) -> dict[str, Any]:
                                     "created_at", "accepted_at", "delivered_at", "updated_at")} | {"content": text}
 
 
-def history(scan: dict[str, Any], redactor: Any) -> list[dict[str, Any]]:
-    rows = db.q("SELECT * FROM agent_messages WHERE scan_id=? ORDER BY id DESC LIMIT 50", (scan["id"],))
+def history(scan: dict[str, Any], redactor: Any, agent_id: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+    sql, args = "SELECT * FROM agent_messages WHERE scan_id=?", [scan["id"]]
+    if agent_id:
+        sql += " AND agent_id=?"
+        args.append(agent_id)
+    rows = db.q(sql + " ORDER BY id DESC LIMIT ?", [*args, max(1, min(500, limit))])
     return [out_row(r, redactor) for r in rows]
+
+
+# ---------------------------------------------------------------- instruction center (SKY-04)
+# What each stored state means for an operator, kept separate from "was it applied?". Nothing in Strix reports that
+# an agent followed an instruction, and an agent saying it did is not execution evidence.
+STAGE = {
+    "sending": ("Sending", "Stored in Skynet; Strix has not answered yet."),
+    "queued": ("Accepted by Strix", "Queued for the agent's next model call; not yet in its context."),
+    "delivered": ("In agent context", "Added to the agent's conversation before a model call."),
+    "expired": ("Not delivered", "The agent or scan ended before its next model call."),
+    "rejected": ("Rejected", "Strix or Skynet refused the message."),
+    "unknown": ("Unconfirmed", "No answer from Strix; it may have been accepted. It was not resent."),
+}
+APPLICATION = {"state": "not_confirmed", "label": "Application not confirmed",
+               "method": "Skynet does not assess whether an instruction was followed. Activity after it is shown "
+                         "for review; ordering in time does not show cause."}
+
+
+def instruction_view(row: dict[str, Any]) -> dict[str, Any]:
+    label, help_ = STAGE.get(row.get("state"), (row.get("state"), ""))
+    accepted_then_ended = row.get("state") == "expired" and bool(row.get("accepted_at"))
+    return {**row, "stage_label": "Accepted, ended before reaching context" if accepted_then_ended else label,
+            "stage_help": help_, "accepted_then_ended": accepted_then_ended,
+            "timeline": [{"phase": p, "at": row.get(k)} for p, k in (("sent", "created_at"), ("accepted", "accepted_at"),
+                                                                       ("in_context", "delivered_at")) if row.get(k)],
+            "application": APPLICATION if row.get("state") == "delivered" else None}
+
+
+MARKER_LIKE = "%[Operator message via Skynet console | id={rid}]%"
+
+
+def marker_position(run_dir: Path | None, agent_id: str, request_id: str) -> int | None:
+    """agents.db row id of the delivered message in that agent's own session (found by its marker each time: Strix
+    may rewrite sessions, so a stored row id would go stale)."""
+    import sqlite3
+    from contextlib import closing
+    path = run_dir / ".state" / "agents.db" if run_dir else None
+    if not path or not path.is_file() or not REQUEST_ID_RE.match(request_id or ""):
+        return None
+    try:
+        with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=3)) as c:
+            r = c.execute("SELECT MIN(id) FROM agent_messages WHERE session_id=? AND message_data LIKE ?",
+                          (agent_id, MARKER_LIKE.format(rid=request_id))).fetchone()
+    except sqlite3.Error:
+        return None
+    return r[0] if r and r[0] is not None else None
 
 
 def availability(scan: dict[str, Any]) -> dict[str, Any]:

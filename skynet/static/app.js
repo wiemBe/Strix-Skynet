@@ -302,6 +302,8 @@ const routes = [
   [/^#\/targets\/new$/, "targets", () => viewTargetForm(null)],
   [/^#\/targets\/(\d+)$/, "targets", (id) => viewTarget(+id)],
   [/^#\/targets\/(\d+)\/edit$/, "targets", (id) => viewTargetForm(+id)],
+  [/^#\/targets\/(\d+)\/compare(?:\?(.*))?$/, "targets", (id, q) => viewCompare(+id, q)],
+  [/^#\/findings\/(\d+)(?:\?(.*))?$/, "scans", (id, q) => viewWorkspace(+id, q)],
   [/^#\/scans$/, "scans", viewScans],
   [/^#\/scans\/(\d+)$/, "scans", (id) => viewScan(+id)],
   [/^#\/schedules$/, "schedules", viewSchedules],
@@ -532,7 +534,8 @@ async function viewTarget(id) {
       meta: [envTag(t.environment), t.application ? h("span", {}, t.application) : null, h("span", { class: "mono" }, t.base_url)],
       actions: [
         menu([{ label: "Edit", icon: "edit", onclick: () => go(`#/targets/${id}/edit`) },
-          { label: "View inventory", icon: "inventory", onclick: () => go(`#/inventory?target=${id}`) }, "-",
+          { label: "View inventory", icon: "inventory", onclick: () => go(`#/inventory?target=${id}`) },
+          { label: "Compare scans", icon: "scans", onclick: () => go(`#/targets/${id}/compare`) }, "-",
           { label: "Delete target", icon: "trash", danger: true, onclick: del }]),
         button("Add schedule", { ic: "schedules", onclick: () => go(`#/schedules/new?target=${id}`) }),
         button(t.active_scan ? "Scan in progress" : "Scan now", { kind: "primary", ic: "play", disabled: !!t.active_scan, onclick: () => scanDialog(t) })] }),
@@ -630,7 +633,7 @@ async function viewScans() {
 async function viewScan(id) {
   let scan = await api(`/api/scans/${id}`);
   let tab = ACTIVE.includes(scan.status) ? "live" : "findings";
-  const headBox = h("div", {}), alertsBox = h("div", {}), factsBox = h("div", {}), tabsBox = h("div", { class: "tabs" }), body = h("div", {});
+  const headBox = h("div", {}), alertsBox = h("div", {}), factsBox = h("div", {}), tabsBox = h("div", { class: "tabs scan-tabs" }), body = h("div", {});
   const log = { source: "strix", offset: -1, box: null, level: "info", follow: null };
   let findingsCount = null;
   const live = { cursor: -1, agent: "", list: null, tree: null, follow: null, state: null, busy: false, generation: 0, calls: new Map(), count: null, events: 0 };
@@ -640,7 +643,7 @@ async function viewScan(id) {
     const active = ACTIVE.includes(scan.status);
     const canResume = scan.trigger !== "verify" && ["cancelled", "failed", "interrupted"].includes(scan.status) && scan.run_name && scan.target_id;
     const files = scan.files || {};
-    const DL = [["report", "Rapor (Markdown)"], ["sarif", "SARIF"], ["json", "Bulgular (JSON)"], ["csv", "Bulgular (CSV)"], ["coverage", "Kapsam (coverage.json)"], ["log", "Strix log"]].filter(([k]) => files[k]);
+    const DL = [["report", "Report (Markdown)"], ["sarif", "SARIF"], ["json", "Findings (JSON)"], ["csv", "Findings (CSV)"], ["coverage", "Coverage (JSON)"], ["log", "Strix log"]].filter(([k]) => files[k]);
     headBox.replaceChildren(pageHead(scan.target_name || scan.name || `Scan #${scan.id}`, {
       crumb: h("a", { href: "#/scans" }, "Scans"),
       meta: [statusChip(scan.status), envTag(scan.environment || scan.target_environment), h("span", { class: "mono", title: (scan.targets || []).join("\n") }, (scan.targets || [])[0] || ""), h("span", { class: "faint" }, `#${scan.id}`)],
@@ -679,7 +682,7 @@ async function viewScan(id) {
       fact("Output folder", h("span", { class: "mono" }, scan.run_name || "—"), scan.run_dir || "")));
   };
 
-  const TABS = [["live", "Live activity"], ["findings", "Findings"], ["log", "Live log"], ["agents", "Agents"], ["telemetry", "Telemetry"], ["report", "Report"], ["details", "Details"]];
+  const TABS = [["live", "Live activity"], ["timeline", "Timeline"], ["findings", "Findings"], ["coverage", "Coverage"], ["sessions", "Session health"], ["instructions", "Instructions"], ["browser", "Browser"], ["log", "Live log"], ["agents", "Agents"], ["telemetry", "Telemetry"], ["report", "Report"], ["details", "Details"]];
   const renderTabs = () => { factsBox.hidden = tab === "live"; tabsBox.replaceChildren(TABS.map(([k, l]) => h("button", { type: "button", class: tab === k ? "on" : null, onclick: () => { tab = k; renderTabs(); renderBody(); } },
     l, k === "findings" && findingsCount != null ? h("span", { class: "cnt" }, findingsCount) : null))); };
   const renderAll = () => { renderHead(); renderAlerts(); renderFacts(); };
@@ -689,6 +692,11 @@ async function viewScan(id) {
     live.list = null; live.busy = false; live.generation++;
     if (tab === "live") { compose.loaded = false; body.replaceChildren(liveView()); await Promise.all([pollLive(), pollMessages(true)]); }
     else if (tab === "findings") body.replaceChildren(await findingsView());
+    else if (tab === "timeline") body.replaceChildren(await skyTimelineTab(id, scan));
+    else if (tab === "coverage") body.replaceChildren(await skyCoverageTab(id));
+    else if (tab === "sessions") body.replaceChildren(await skySessionTab(id, scan));
+    else if (tab === "instructions") body.replaceChildren(await skyInstructionsTab(id, scan));
+    else if (tab === "browser") body.replaceChildren(await skyBrowserTab(id, scan));
     else if (tab === "log") body.replaceChildren(logView());
     else if (tab === "agents") body.replaceChildren(await agentsView());
     else if (tab === "telemetry") body.replaceChildren(await telemetryView());
@@ -758,7 +766,7 @@ async function viewScan(id) {
         h("div", { class: "live-run-info" }, h("div", { class: "live-info-label" }, "THIS RUN"),
           h("div", { class: "live-info-row" }, h("span", {}, "Duration"), h("strong", {}, durationText(scan))),
           h("div", { class: "live-info-row" }, h("span", {}, "Tokens"), h("strong", {}, fmtTokens(sm.tokens))),
-          h("div", { class: "live-info-row" }, h("span", {}, "Mod"), h("strong", {}, MODE_TR[scan.scan_mode] || "—")),
+          h("div", { class: "live-info-row" }, h("span", {}, "Mode"), h("strong", {}, MODE_TR[scan.scan_mode] || "—")),
           h("div", { class: "live-model", title: scan.model || "" }, modelShort(scan.model)))));
   }
 
@@ -920,7 +928,7 @@ async function viewScan(id) {
       for (const [cid, item] of live.calls) if (!list.contains(item.entry)) live.calls.delete(cid);
       if (!list.childElementCount) list.append(h("div", { class: "live-empty faint" }, r.available ? "No visible activity for this agent yet." : "Strix has not created the activity store yet."));
       if (live.follow.checked && (r.items || []).length) list.scrollTop = list.scrollHeight;
-      const labels = { ...STATUS_TR, waiting: "Waiting", idle: "Idle", stopped: "Stopped" };
+      const labels = { ...STATUS_TR, waiting: "Waiting", idle: "Idle", stopped: "Stopped", crashed: "Crashed", budget_paused: "Paused at budget limit" };
       const seen = new Set(), nodes = [];
       const pick = (aid) => {
         live.agent = aid; live.cursor = -1; live.generation++; live.busy = false;
@@ -928,20 +936,29 @@ async function viewScan(id) {
         pollLive();
       };
       nodes.push(h("button", { type: "button", class: "live-all" + (!live.agent ? " selected" : ""), onclick: () => pick(""), "aria-pressed": !live.agent }, icon("scans"), "All agents", h("span", {}, a.agents.length)));
+      // Nested <ul> tree: each sub-agent hangs off its parent with an elbow connector (see .live-subtree in style.css).
+      const tone = (s) => s === "running" ? "running" : s === "completed" ? "completed" : ["failed", "error", "crashed"].includes(s) ? "failed" : "idle";
       const visit = (agent, depth) => {
-        if (seen.has(agent.id)) return;
+        if (seen.has(agent.id)) return null;
         seen.add(agent.id);
-        const b = h("button", { type: "button", class: "live-agent" + (live.agent === agent.id ? " selected" : "") + (depth ? " child" : ""), "aria-pressed": live.agent === agent.id, onclick: () => pick(agent.id) },
-          h("span", { class: "live-agent-name" }, agent.name),
-          h("span", { class: "status " + (agent.status === "running" ? "running" : agent.status === "completed" ? "completed" : "neutral") }, h("span", { class: "dot" }), labels[agent.status] || agent.status));
-        b.style.marginLeft = `${Math.min(depth, 4) * 12}px`;
-        nodes.push(b);
-        if (live.agent === agent.id && agent.task) nodes.push(h("details", { class: "live-agent-task" }, h("summary", {}, "View task"), h("div", {}, agent.task)));
-        a.agents.filter((x) => x.parent === agent.id).forEach((x) => visit(x, depth + 1));
+        const kids = a.agents.filter((x) => x.parent === agent.id && !seen.has(x.id));
+        const selected = live.agent === agent.id;
+        const node = h("li", { class: "live-node" + (depth ? "" : " root") },
+          h("button", { type: "button", class: "live-agent" + (selected ? " selected" : ""), "aria-pressed": selected, onclick: () => pick(agent.id) },
+            h("span", { class: "live-agent-row" }, h("span", { class: "live-agent-dot " + tone(agent.status), "aria-hidden": "true" }), h("span", { class: "live-agent-name" }, agent.name)),
+            h("span", { class: "live-agent-meta" }, labels[agent.status] || agent.status,
+              kids.length ? ` · ${kids.length} sub-agent${kids.length === 1 ? "" : "s"}` : null)));
+        if (selected && agent.task) node.append(h("details", { class: "live-agent-task" }, h("summary", {}, "View task"), h("div", {}, agent.task)));
+        const sub = h("ul", { class: "live-subtree" + (depth >= 3 ? " flat" : "") });
+        kids.forEach((x) => { const n = visit(x, depth + 1); if (n) sub.append(n); });
+        if (sub.childElementCount) node.append(sub);
+        return node;
       };
-      a.agents.filter((x) => !x.parent || !byId[x.parent]).forEach((x) => visit(x, 0));
-      a.agents.forEach((x) => visit(x, 0));
-      live.tree.replaceChildren(nodes);
+      const tree = h("ul", { class: "live-tree" });
+      a.agents.filter((x) => !x.parent || !byId[x.parent]).forEach((x) => { const n = visit(x, 0); if (n) tree.append(n); });
+      a.agents.forEach((x) => { const n = visit(x, 0); if (n) tree.append(n); });
+      nodes.push(tree);
+      live.tree.replaceChildren(...nodes);
       const agentCount = document.getElementById("liveAgentCount"); if (agentCount) agentCount.textContent = a.agents.length;
       live.state.textContent = r.note || `${ACTIVE.includes(scan.status) ? "Live connection · 2s updates" : "Recorded session"} · ${new Date().toLocaleTimeString("en-US", { timeZone: TZ })}`;
       live.count.textContent = `${list.querySelectorAll(".live-event").length} events`;
@@ -990,8 +1007,8 @@ async function viewScan(id) {
   async function agentsView() {
     const [a, tel] = await Promise.all([api(`/api/scans/${id}/agents`), api(`/api/scans/${id}/telemetry`)]);
     if (!a.agents.length) return h("div", { class: "card" }, emptyState("No agent info", "Strix writes agent states after the scan starts."));
-    const stMap = { running: "running", completed: "completed", failed: "failed", waiting: "queued" };
-    const labels = { ...STATUS_TR, waiting: "Waiting", idle: "Idle", stopped: "Stopped", budget_stopped: "Stopped at budget limit" };
+    const stMap = { running: "running", completed: "completed", failed: "failed", crashed: "failed", waiting: "queued", cancelled: "cancelled", interrupted: "interrupted" };
+    const labels = { ...STATUS_TR, waiting: "Waiting", idle: "Idle", stopped: "Stopped", crashed: "Crashed", budget_paused: "Paused at budget limit", budget_stopped: "Stopped at budget limit" };
     const name = (aid) => (a.agents.find((y) => y.id === aid) || {}).name || aid;
     const byId = {}; ((tel.telemetry || {}).agents || []).forEach((g) => { byId[g.agent_id] = g; });
     const ordered = [], visited = new Set();
@@ -1041,7 +1058,7 @@ async function viewScan(id) {
   }
 
   function detailsView() {
-    return h("div", { class: "grid-2" },
+    return h("div", { class: "grid-2 scan-details" },
       h("div", { class: "card card-pad" }, h("div", { class: "card-title" }, "Parameters"), h("dl", { class: "dl" },
         h("dt", {}, "Strix targets"), h("dd", { class: "mono" }, (scan.targets || []).map((t) => h("div", {}, t))),
         h("dt", {}, "Turns per agent"), h("dd", {}, scan.max_turns || "Strix default (500)"),
@@ -1049,7 +1066,7 @@ async function viewScan(id) {
         h("dt", {}, "Resumed run"), h("dd", { class: scan.resume_run ? "mono" : "faint" }, scan.resume_run || "—"),
         h("dt", {}, "Strix exit code"), h("dd", {}, scan.exit_code ?? "—", scan.exit_code === 2 ? h("span", { class: "faint" }, " · findings found") : scan.exit_code === 1 ? h("span", { class: "faint" }, " · error or interruption") : null),
         h("dt", {}, "Output folder"), h("dd", { class: "mono" }, scan.run_dir || "—"),
-        h("dt", {}, "Extra instructions"), h("dd", {}, scan.instruction ? h("pre", { class: "mono", style: null }, scan.instruction) : h("span", { class: "faint" }, "None")))),
+        h("dt", {}, "Extra instructions"), h("dd", {}, scan.instruction ? h("pre", { class: "mono scan-instructions" }, scan.instruction) : h("span", { class: "faint" }, "None")))),
       h("div", { class: "card card-pad" }, h("div", { class: "card-title" }, "Executive summary (Strix)"),
         scan.executive_summary_html ? h("div", { class: "md", html: scan.executive_summary_html }) : h("div", { class: "faint" }, "Strix did not write a summary for this run.")));
   }
@@ -1512,7 +1529,8 @@ function verificationPanel(gid) {
       });
       verifBox.replaceChildren(
         h("div", { class: "verif-head" }, h("h4", {}, "Verification"),
-          button(rows.length ? "Re-verify" : "Verify", { size: "sm", ic: "refresh", disabled: anyActive, title: "Re-run Strix focused on this finding", onclick: startVerify })),
+          h("div", { class: "actions" }, button("Evidence workspace", { size: "sm", title: "Attack/control evidence side by side, with analyst notes", onclick: () => { closeDialogs(); go(`#/findings/${gid}`); } }),
+            button(rows.length ? "Re-verify" : "Verify", { size: "sm", ic: "refresh", disabled: anyActive, title: "Re-run Strix focused on this finding", onclick: startVerify }))),
         h("div", { class: "help" }, "Run a focused verification using current Vault profiles. Results never change remediation automatically. Fingerprint grouping is a correlation hint, not proof of the same vulnerability."),
         rows.length ? h("div", { class: "verif-list" }, rows) : h("div", { class: "faint" }, "Not verified yet."));
       if (anyActive && !vpoll) vpoll = setInterval(pollVerifs, 3000);

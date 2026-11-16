@@ -1,0 +1,12 @@
+# RHEL 9 userland + x86_64; QA only, not a production Docker-socket deployment.
+FROM registry.access.redhat.com/ubi9/python-312@sha256:5b184c2acfe9e2eb9df1a243da8e4a82fedd96e5e7f6648ec5512656177fa326
+USER 0
+WORKDIR /opt/skynet
+COPY . /opt/skynet
+RUN python3.12 -m venv .venv && .venv/bin/python -m pip install --only-binary=:all: -r requirements-app.lock \
+    && SKYNET_STRIX_PYTHON=/usr/bin/python3.12 bash scripts/setup_strix.sh \
+    && .venv/bin/python -m pip check
+RUN mkdir -p /var/lib/skynet /var/lib/skynet-keys && chown 1001:0 /var/lib/skynet /var/lib/skynet-keys
+USER 1001
+ENV SKYNET_LOAD_DOTENV=0
+CMD [".venv/bin/python", "-m", "unittest", "discover", "-s", "tests"]

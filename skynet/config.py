@@ -24,7 +24,8 @@ def _load_dotenv(path: Path) -> None:
         os.environ.setdefault(k, v)
 
 
-_load_dotenv(PROJECT_DIR / ".env")
+if os.environ.get("SKYNET_LOAD_DOTENV", "1") != "0":
+    _load_dotenv(PROJECT_DIR / ".env")
 
 DATA_DIR = Path(os.environ.get("SKYNET_DATA") or PROJECT_DIR / "data").expanduser().resolve()
 DB_PATH = DATA_DIR / "skynet.db"

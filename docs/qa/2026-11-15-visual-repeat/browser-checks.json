@@ -1,0 +1,597 @@
+{
+  "date": "2026-11-15",
+  "timezone": "Europe/Istanbul",
+  "environment": "Isolated history copy on localhost:8796; no worker/scheduler/import/recovery; no pentest or instruction sent",
+  "checks": [
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "session",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "coverage",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "timeline",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "instructions",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "browser",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "agents",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "telemetry",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 145,
+      "view": "details",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "activity",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "evidence-dialog",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "activity-agent",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "activity",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "session",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "coverage",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "timeline",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "instructions",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "browser",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "agents",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "telemetry",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "details",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "workspace",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "workspace",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "compare",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "compare",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "scan-dialog",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "scan-dialog",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "scan-dialog",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "scan-dialog-scrolled",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "scan-dialog",
+      "width": 1920
+    },
+    {
+      "footerBottom": 1054.9921875,
+      "headerTop": 87.3984375,
+      "height": 1080,
+      "view": "scan-dialog-controls",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "evidence-dialog",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "evidence-dialog",
+      "width": 1366
+    },
+    {
+      "footerBottom": 682.1875,
+      "headerTop": 62.4375,
+      "height": 768,
+      "view": "evidence-dialog-controls",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "findings",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "log",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "report",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "findings",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "log",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "report",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "activity-final",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "details",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "details",
+      "width": 1920
+    },
+    {
+      "footerBottom": 742.9921875,
+      "headerTop": 62.4375,
+      "height": 768,
+      "view": "scan-dialog-controls",
+      "width": 1366
+    }
+  ],
+  "console": [],
+  "interactions": [
+    "Agent filter selected and stream updated",
+    "Session evidence Open and Close",
+    "Workspace response comparison 803/804",
+    "Scan form scrolled to Extra instructions and cancelled",
+    "12 scan tabs accessible at both sizes"
+  ],
+  "caveats": [
+    "Historical local records 17/18/19 only; no new engine run",
+    "Log and Report empty states in QA copy",
+    "Sidebar count includes explicitly labeled pre-existing UI-only fixture scan"
+  ],
+  "latestChecks": [
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "session",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "coverage",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "timeline",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "instructions",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "browser",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "agents",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "telemetry",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "details",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "activity",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "evidence-dialog",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "activity-agent",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "activity",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "session",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "coverage",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "timeline",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "instructions",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "browser",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "agents",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "telemetry",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "details",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "workspace",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "workspace",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "compare",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "compare",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "scan-dialog",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "scan-dialog",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "scan-dialog-scrolled",
+      "width": 1366
+    },
+    {
+      "footerBottom": 1054.9921875,
+      "headerTop": 87.3984375,
+      "height": 1080,
+      "view": "scan-dialog-controls",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "evidence-dialog",
+      "width": 1920
+    },
+    {
+      "footerBottom": 682.1875,
+      "headerTop": 62.4375,
+      "height": 768,
+      "view": "evidence-dialog-controls",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "findings",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "log",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "report",
+      "width": 1366
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "findings",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "log",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 1080,
+      "pageOverflow": 0,
+      "view": "report",
+      "width": 1920
+    },
+    {
+      "clippedTabs": [],
+      "height": 768,
+      "pageOverflow": 0,
+      "view": "activity-final",
+      "width": 1366
+    },
+    {
+      "footerBottom": 742.9921875,
+      "headerTop": 62.4375,
+      "height": 768,
+      "view": "scan-dialog-controls",
+      "width": 1366
+    }
+  ],
+  "latestProblems": [],
+  "fixedDuringQA": [
+    "Laptop scan tabs clipped",
+    "Session labels truncated",
+    "Dialog actions below viewport",
+    "Details instructions overflowed page by 145px and cards misaligned",
+    "Mode label remained Turkish"
+  ]
+}

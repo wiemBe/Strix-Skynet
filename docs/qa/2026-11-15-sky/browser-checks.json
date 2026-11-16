@@ -1,0 +1,26 @@
+{
+  "date": "2026-11-15",
+  "environment": "Scratchpad SQLite backup-API copy of the earlier Claude QA database (scans 17-22); server on 127.0.0.1:8792 with no queue worker, scheduler, import, backfill or scan recovery. Repository data/ and the earlier QA copies were not used.",
+  "data": "Real recorded local runs only: scan 17 (127.0.0.1:8899 IDOR run), scan 21 (bridged run with two real operator messages). No new Strix scan or LLM call.",
+  "capture_note": "Screenshots are the browser tool's 800 px downscaled captures; measurements below were read from the DOM at full viewport size.",
+  "checks": [
+    {"view": "#/scans/17 · Session health", "viewports": ["1366x768", "1920x1080"], "docScrollWidthEqualsViewport": true, "jsErrors": 0},
+    {"view": "#/scans/17 · Coverage (+ cell detail)", "viewports": ["1366x768", "1920x1080"], "docScrollWidthEqualsViewport": true, "jsErrors": 0},
+    {"view": "#/scans/17 · Timeline (replay at 42%)", "viewports": ["1366x768", "1920x1080"], "docScrollWidthEqualsViewport": true, "jsErrors": 0, "eventsLoaded": "561 of 561", "apiRequestsWhileScrubbing": 0},
+    {"view": "#/scans/21 · Instructions (following activity open)", "viewports": ["1366x768", "1920x1080"], "docScrollWidthEqualsViewport": true, "jsErrors": 0, "markerFoundInRealSession": true},
+    {"view": "#/scans/21 · Browser", "viewports": ["1366x768", "1920x1080"], "docScrollWidthEqualsViewport": true, "jsErrors": 0, "agentSwitchClearsPreviousImmediately": true},
+    {"view": "#/findings/1?occurrence=1 · Evidence workspace (diff, note)", "viewports": ["1366x768", "1920x1080"], "docScrollWidthEqualsViewport": true, "jsErrors": 0, "htmlInNoteRenderedAsText": true},
+    {"view": "#/targets/1/compare?ref=17&cmp=21", "viewports": ["1366x768", "1920x1080"], "docScrollWidthEqualsViewport": true, "jsErrors": 0}
+  ],
+  "defects_found_and_fixed": [
+    "Session-health table 1710 px wide at 1366 (nowrap reason text) -> reasons and time sources wrap; dates stay on one line",
+    "Caido created_at treated as UTC (3 h off on real data) -> zone derived from GMT Date headers, else unavailable",
+    "Strict masking rewrote timeline keys containing 'session:' -> two events merged (559 of 561) -> keys exempt, segment renamed",
+    "Comparison missed 'coverage record incomplete' because run_ingest stores 0/1 -> fixed and test tightened",
+    "Comparison coverage lookup by path only (OPTIONS inherited GET status) -> per method",
+    "Missing-finding reason said 'no test evidence' when a non-tested coverage cell existed -> states the actual cell status",
+    "'Access-control' (hyphen) not mapped to WSTG-ATHZ",
+    "Replay covered only the first loaded page -> loads the full history (bounded at 5000) when replay starts",
+    "Checkbox inputs stretched by toolbar min-width; side-by-side cards offset by '.card + .card' margin; oversized empty states"
+  ]
+}

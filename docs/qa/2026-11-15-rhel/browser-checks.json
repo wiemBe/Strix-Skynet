@@ -1,0 +1,162 @@
+{
+  "measurements": [
+    {
+      "server": "Linux real startup",
+      "view": "targets",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "server": "Linux real startup",
+      "view": "campaigns",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "server": "Linux real startup",
+      "view": "schedules",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "server": "Linux real startup",
+      "view": "vault",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "server": "Linux real startup",
+      "view": "settings",
+      "height": 768,
+      "scrollWidth": 1366,
+      "width": 1366
+    },
+    {
+      "server": "Linux real startup",
+      "view": "targets",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "server": "Linux real startup",
+      "view": "campaigns",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "server": "Linux real startup",
+      "view": "schedules",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "server": "Linux real startup",
+      "view": "vault",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "server": "Linux real startup",
+      "view": "settings",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "height": 768,
+      "scrollWidth": 1366,
+      "view": "coverage-detail",
+      "width": 1366
+    },
+    {
+      "height": 1080,
+      "scrollWidth": 1920,
+      "view": "coverage-detail",
+      "width": 1920
+    },
+    {
+      "height": 768,
+      "scrollWidth": 1366,
+      "view": "session-health",
+      "width": 1366
+    },
+    {
+      "height": 1080,
+      "scrollWidth": 1920,
+      "view": "session-health",
+      "width": 1920
+    },
+    {
+      "height": 768,
+      "scrollWidth": 1366,
+      "view": "timeline-replay",
+      "width": 1366
+    },
+    {
+      "height": 1080,
+      "scrollWidth": 1920,
+      "view": "timeline-replay",
+      "width": 1920
+    },
+    {
+      "height": 768,
+      "scrollWidth": 1366,
+      "view": "Instructions",
+      "width": 1366
+    },
+    {
+      "height": 1080,
+      "scrollWidth": 1920,
+      "view": "Instructions",
+      "width": 1920
+    },
+    {
+      "height": 768,
+      "scrollWidth": 1366,
+      "view": "Browser",
+      "width": 1366
+    },
+    {
+      "height": 1080,
+      "scrollWidth": 1920,
+      "view": "Browser",
+      "width": 1920
+    },
+    {
+      "height": 768,
+      "scrollWidth": 1366,
+      "view": "evidence-response-diff",
+      "width": 1366
+    },
+    {
+      "height": 1080,
+      "scrollWidth": 1920,
+      "view": "evidence-response-diff",
+      "width": 1920
+    },
+    {
+      "height": 768,
+      "scrollWidth": 1366,
+      "view": "compare",
+      "width": 1366
+    },
+    {
+      "height": 1080,
+      "scrollWidth": 1920,
+      "view": "compare",
+      "width": 1920
+    }
+  ],
+  "console": [],
+  "replay": "561 events loaded; Home + Play advanced position and displayed records; no scan actions",
+  "downloadMenu": "Findings (JSON), Coverage (JSON)",
+  "historyServer": "Copied real local runs 17/18/19; workers and scheduler disabled"
+}

@@ -1,0 +1,40 @@
+{
+  "ordinary_reads_marked_injection_tested": {
+    "status": "tested",
+    "type": "WSTG-INPV",
+    "evidence_count": 2
+  },
+  "other_host_evidence_matches_target_claim": {
+    "status": "tested",
+    "endpoint": "GET /api/orders/{id}"
+  },
+  "latest_outcome_retroactively_at_recorded_time": [
+    {
+      "at": "2026-11-15T09:00:00Z",
+      "summary": "reported \u00b7 GET /api/me (Broken object-level authorization (IDOR))"
+    },
+    {
+      "at": "2026-11-15T10:00:00Z",
+      "summary": "reported \u00b7 GET /api/me (Broken object-level authorization (IDOR))"
+    }
+  ],
+  "conflicting_same_timestamp_session_signals": {
+    "state": "lost",
+    "times": [
+      "2026-11-15T09:00:01.000Z",
+      "2026-11-15T09:00:01.000Z"
+    ]
+  },
+  "same_timestamp_reversed_ids_claim_verified": {
+    "state": "verified"
+  },
+  "timeline_cache_ignores_changed_secret_masks": {
+    "fresh_redactor_masks": true,
+    "cached_response_leaks_fixture_secret": true
+  },
+  "live_highwater_skips_unread_batch_tail": {
+    "matched": 600,
+    "returned": 500,
+    "next_poll_returns": 0
+  }
+}

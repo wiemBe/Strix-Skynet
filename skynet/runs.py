@@ -159,6 +159,25 @@ def agents(run_dir: Path) -> dict[str, Any]:
     return {"agents": lst, "counts": counts}
 
 
+# Strix agent states that only make sense while the Strix process is alive (core/agents.py `Status`).
+AGENT_LIVE_STATES = frozenset({"running", "waiting", "budget_paused"})
+
+
+def settle_agents(data: dict[str, Any], scan_status: str, active: bool) -> dict[str, Any]:
+    """Once a scan has ended, agents Strix last recorded as live cannot still be live: a cancelled or crashed
+    process never gets to write their final state. Report them with the scan's end state instead (keeping
+    Strix's last word in `reported_status`) so the UI does not show 'Running' under a cancelled scan."""
+    if active:
+        return data
+    end = scan_status if scan_status in ("cancelled", "interrupted", "failed") else "stopped"
+    lst = [{**a, "status": end, "reported_status": a["status"]} if a.get("status") in AGENT_LIVE_STATES else a
+           for a in data.get("agents") or []]
+    counts: dict[str, int] = {}
+    for x in lst:
+        counts[x["status"]] = counts.get(x["status"], 0) + 1
+    return {**data, "agents": lst, "counts": counts}
+
+
 def summarize(run_dir: Path, fail_on: str | None = None) -> dict[str, Any]:
     meta = run_meta(run_dir)
     items = findings(run_dir)

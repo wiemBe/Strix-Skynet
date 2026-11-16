@@ -257,6 +257,22 @@ class TestVerifyClassify(unittest.TestCase):
         self.traffic(); self.assessment()
         self.assertEqual(self.result(), "not_reproduced")
 
+    def test_caido_complete_bodiless_get_is_valid_evidence(self):
+        for rid, n in (("11", 4), ("12", 5)):
+            self.view(rid, "request", f"GET /api/orders/{n} HTTP/1.1\nHost: 127.0.0.1:8899\nAuthorization: Bearer current-token", has_more=False)
+            self.view(rid, "response", f"HTTP/1.1 200 OK\nContent-Type: text/plain\n\nidentity:tester order:{n}", has_more=False)
+        self.assessment()
+        self.assertEqual(self.result(), "not_reproduced")
+
+    def test_bodiless_compatibility_never_accepts_missing_bodies_or_partial_pages(self):
+        head = "GET /api/orders/4 HTTP/1.1\nHost: 127.0.0.1:8899\n"
+        for extra in ("Content-Length: 5", "Content-Length:", "Content-Length: 5\nContent-Length: 0",
+                      "Content-Length : 5\nContent-Length: 0", "Content-Length: ٠",
+                      "Transfer-Encoding: chunked", "incomplete header"):
+            self.assertIsNone(self.V._http(head + extra, complete_request=True))
+        self.assertIsNone(self.V._http(head))
+        self.assertIsNone(self.V._http("HTTP/1.1 200 OK\nContent-Length: 5", response=True, complete_request=True))
+
     def test_login_page_200_is_inconclusive(self):
         self.traffic(marker="Sign in"); self.assessment()
         self.assertEqual(self.result(), "inconclusive")

@@ -2,6 +2,9 @@
 
 Güncel çalışma ve doğrulama takibi: [PROGRESS.md](PROGRESS.md). Arayüz dili İngilizce, varsayılan saat dilimi Europe/Istanbul.
 
+Kullanıcının seçtiği özellikler ve kabul ölçütleri: [FEATURE_BACKLOG.md](docs/FEATURE_BACKLOG.md). Uygulama durumu,
+testler ve kalan maddeler PROGRESS.md içindeki "SKY-01…07" bölümünde.
+
 Skynet, uygulamaları production'a çıkmadan önce ve sonrasında düzenli aralıklarla pentestten geçirmek için
 kullanılan web tabanlı yönetim arayüzüdür. Pentest motoru olarak makinede kurulu **[Strix](https://github.com/usestrix/strix)**
 CLI'ını kullanır; Strix'i yeniden yazmaz, yalnızca taramaları başlatır, izler, zamanlar ve sonuçlarını gösterir.
@@ -16,6 +19,9 @@ CLI'ını kullanır; Strix'i yeniden yazmaz, yalnızca taramaları başlatır, i
 - Tarama geçmişi, bulgu aday grupları (giderilme durumu), Strix raporları, SARIF/CSV/JSON/Markdown indirme
 - LLM bağlantı profilleri: OpenRouter ve kurum içi LiteLLM, kod değişikliği olmadan geçiş
 - Prod öncesi CI kullanımı için token korumalı API (bulgu eşiği: pass/fail)
+- **Kanıt görünümleri (SKY-01…07):** tarama karşılaştırması, ajan bazında oturum sağlığı, kanıta bağlı kapsam
+  matrisi (endpoint × rol × WSTG test türü), talimat merkezi, zaman çizelgesi ve replay, tarayıcı görünümü
+  (yalnız metadata), bulgu kanıt çalışma alanı (maskeli fark, analist notları)
 
 Tüm Strix çıktıları (log, rapor, bulgu, yönetici özeti, indirmeler) gösterilmeden önce kimlik profili sırlarına
 ve bilinen gizli desenlere karşı maskelenir.
@@ -31,11 +37,13 @@ cp .env.example .env      # gerekirse düzenleyin
 ./run.sh                  # http://127.0.0.1:8787
 ```
 
-`run.sh` ilk çalıştırmada `.venv` oluşturup `requirements.txt` bağımlılıklarını, ardından
+RHEL 9.4+ x86_64 için servis kurulumu, veri/anahtar taşıma ve kabul kontrolleri: **[docs/RHEL.md](docs/RHEL.md)**.
+
+`run.sh` ilk çalıştırmada `.venv` oluşturup `requirements-app.lock` bağımlılıklarını, ardından
 `scripts/setup_strix.sh` ile Strix'i `.strix-runtime/` içine kurar: wheel'in SHA-256'sı doğrulanır ve test edilmiş
 bağımlılık kilidi (`vendor/strix/requirements.lock`) kullanılır. Bağımlılıklar PyPI'dan indirilir; sandbox imajını
-Strix ilk taramada Docker ile çeker. Paketlenen wheel macOS/Apple silicon içindir; başka platformda Strix'i ayrıca
-kurup `SKYNET_STRIX_BIN` verin. Yeni kurulumda Settings'teki Strix yolu varsayılan olarak bu paketlenmiş motordur;
+Strix ilk taramada Docker ile çeker. Resmi wheel'ler Linux x86_64 ve macOS Apple silicon için paketlenmiştir;
+kurucu işletim sistemi/mimariye göre seçer. Diğer platformlarda ayrı bir Strix kurulumu gerekir. Yeni kurulumda Settings'teki Strix yolu varsayılan olarak bu paketlenmiş motordur;
 var olan kurulumların ayarı değişmez. Yeniden kurmak için: `scripts/setup_strix.sh --force`.
 
 **Giriş:** `.env` içinde `SKYNET_PASSWORD` boşsa ilk açılışta rastgele bir şifre üretilir ve
@@ -280,3 +288,15 @@ kullanılamaz görünür. Runtime kurulumu: Python 3.12 ile `.strix-runtime` ven
 `scans.control_mode/control_note` alanlarını ekler (öncesinde yedek alınır).
 
 Bu geliştirme oturumunun test kapsamı ve canlı motor çalıştırması sınırları [PROGRESS.md](PROGRESS.md)'dedir.
+
+## Kanıt görünümü kuralları
+
+Coverage hücreleri scheme + host + port + yöntem + normalize path ile ayrılır; origin her hücrede görünür.
+İki HTTP kaydı veya ajanın “test ettim” beyanı tek başına `Tested` değildir. Bu durum için aynı taramanın
+kabul edilmiş Skynet doğrulamasının ilgili kategori/endpoint/rol için tam kayıtlara bağlı olması gerekir.
+Desteklenmeyen kategoriler `Partially tested` / `Unknown` kalır; hiçbir durum otomatik giderilme kararı vermez.
+
+Timeline Vault değişince yeniden maskelenir. Canlı akış opak, sayfalanabilir alım cursor'u kullanır;
+büyük partiler, geç gelen kayıtlar ve aynı olayın güncellemeleri işlenir. Replay başlangıç olayına güncel
+coverage sonucunu geçmişten biliniyormuş gibi taşımaz. Çelişkili oturum sinyallerinin sırası kanıtlanamıyorsa
+`Unknown` gösterilir. Ayrıntı ve 138 testlik son kontrol: [R1–R6 düzeltmeleri](docs/reviews/2026-11-15-sky-fixes.md).

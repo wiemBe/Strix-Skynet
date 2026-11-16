@@ -1,0 +1,1 @@
+{"version": "1.7.0", "wheel": "strix_agent-1.7.0-py3-none-manylinux_2_17_x86_64.whl", "sha256": "854f2aea63768a3e6280ef17e609542fdb85917bbcfccf0ed89238a1411ebf82", "dependencies_sha256": "2f9a0e385a3498958c78bd30863fdb0eccff818442c7aff347f196554047aec6"}

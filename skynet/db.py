@@ -138,7 +138,7 @@ DEFAULT_SETTINGS: dict[str, str] = {
 
 JSON_COLS = {"targets", "extra_targets", "in_scope", "out_of_scope", "weekdays", "summary",
              "auth_profile_ids", "auth_profile_names", "auth_checks", "header_names", "cookie_names",
-             "attrs", "counts", "telemetry", "profiles", "verification_evidence"}
+             "attrs", "counts", "telemetry", "profiles", "verification_evidence", "auth_snapshot"}
 DICT_COLS = {"summary", "attrs", "counts", "telemetry", "verification_evidence"}
 
 
@@ -342,11 +342,57 @@ CREATE TABLE agent_messages (
 CREATE INDEX idx_agent_messages_scan ON agent_messages(scan_id);
 """
 
+# Analyst workspace (SKY-07) and per-scan credential binding metadata (SKY-02). Every analyst table is append-only:
+# a correction is a new row; machine evidence (run files, finding_occurrences, finding_verifications) is never
+# written by these features.
+MIGRATION_5 = """
+ALTER TABLE scans ADD COLUMN auth_snapshot TEXT DEFAULT '[]';
+CREATE TABLE analyst_notes (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id       INTEGER NOT NULL,
+    occurrence_id  INTEGER,
+    verification_id INTEGER,
+    created_by     TEXT DEFAULT '',
+    created_at     TEXT
+);
+CREATE TABLE analyst_note_revisions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    note_id    INTEGER NOT NULL,
+    body_enc   TEXT NOT NULL,
+    author     TEXT DEFAULT '',
+    created_at TEXT
+);
+CREATE INDEX idx_anotes_group ON analyst_notes(group_id);
+CREATE INDEX idx_anote_rev ON analyst_note_revisions(note_id, id);
+CREATE TABLE evidence_labels (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id      INTEGER NOT NULL,
+    occurrence_id INTEGER,
+    run_name      TEXT NOT NULL,
+    request_id    TEXT NOT NULL,
+    label         TEXT NOT NULL,
+    author        TEXT DEFAULT '',
+    created_at    TEXT
+);
+CREATE INDEX idx_elabels ON evidence_labels(group_id, run_name, request_id, id);
+CREATE TABLE occurrence_reviews (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    occurrence_id INTEGER NOT NULL,
+    group_id      INTEGER NOT NULL,
+    decision      TEXT NOT NULL,
+    note          TEXT DEFAULT '',
+    author        TEXT DEFAULT '',
+    created_at    TEXT
+);
+CREATE INDEX idx_occ_reviews ON occurrence_reviews(occurrence_id, id);
+"""
+
 MIGRATIONS: list[tuple[int, str, str]] = [
     (1, "campaigns, auth profiles, finding correlation, inventory, telemetry", MIGRATION_1),
     (2, "per-finding verification (finding_verifications)", MIGRATION_2),
     (3, "verification evidence field and versioned conservative classification", MIGRATION_3),
     (4, "operator messages to running agents (agent_messages, scans.control_mode)", MIGRATION_4),
+    (5, "analyst notes, evidence labels, correlation reviews, per-scan credential bindings", MIGRATION_5),
 ]
 
 

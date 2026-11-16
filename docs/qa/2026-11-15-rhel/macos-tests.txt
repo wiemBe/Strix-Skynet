@@ -1,0 +1,19 @@
+./opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/unittest/mock.py:2263: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x108b9bbc0>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+.......<frozen importlib._bootstrap_external>:500: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x108d06ea0>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+<frozen importlib._bootstrap_external>:500: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x108d8c2e0>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+<frozen importlib._bootstrap_external>:500: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x108d8c3c0>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+<frozen importlib._bootstrap_external>:500: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x108d8c200>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+<frozen importlib._bootstrap_external>:500: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x108d8c580>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+..............................................................................2026-11-15 19:06:29,096 WARNING skynet.control: ignoring control file with unsafe permissions: scan_11_control.json
+..............................................................
+----------------------------------------------------------------------
+Ran 148 tests in 11.545s
+
+OK

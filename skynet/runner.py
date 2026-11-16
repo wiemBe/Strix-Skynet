@@ -272,6 +272,11 @@ def _launch(scan: dict[str, Any], settings: dict[str, str]) -> None:
     else:
         cmd, control_mode, control_note = [bin_path, *args], "", bridge["reason"]
 
+    from . import verify
+    # Keyed HMAC digests + non-secret profile metadata, for session-health evidence (SKY-02). Computed before the
+    # process starts so a failure here can never leave an untracked Strix process behind.
+    auth_snapshot = vault.global_redactor().obj(verify.profile_snapshot(profiles), True)
+
     log_path = LOG_DIR / f"scan_{sid}.log"
     before = {p.name for p in runs.list_run_dirs(str(workdir))}
     with log_path.open("ab") as lf:
@@ -288,9 +293,9 @@ def _launch(scan: dict[str, Any], settings: dict[str, str]) -> None:
                              "run_name": resume,
                              "run_dir": str(runs.runs_root(str(workdir)) / resume) if resume else None,
                              "redact_enc": crypto.vault_encrypt(json.dumps(sorted(set(masks)))) if masks else "",
-                             "auth_checks": auth_checks, "control_mode": control_mode, "control_note": control_note})
+                             "auth_checks": auth_checks, "control_mode": control_mode, "control_note": control_note,
+                             "auth_snapshot": auth_snapshot})
     if scan.get("trigger") == "verify":
-        from . import verify
         verify.mark_started(sid, profiles)
     with _lock:
         _procs[sid] = proc

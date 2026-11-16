@@ -15,8 +15,8 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
-from . import (activity, auth, campaigns, control, crypto, db, findings_store, inventory, llm, runner, runs, scheduler, targets,
-               telemetry, vault, verify)
+from . import (activity, auth, browser, campaigns, compare, control, coverage_matrix, crypto, db, findings_store, inventory,
+               llm, runner, runs, scheduler, session_health, targets, telemetry, timeline, vault, verify, workspace)
 from .config import COOKIE_SECURE, LOG_DIR, SESSION_HOURS, STATIC_DIR, TIMEZONE, USER_STRIX_CONFIG
 
 
@@ -149,6 +149,7 @@ def _scan_out(s: dict[str, Any] | None) -> dict[str, Any] | None:
     s = dict(s)
     s.pop("pid", None)
     s.pop("redact_enc", None)
+    s.pop("auth_snapshot", None)   # keyed digests: comparison metadata only, never shown
     return red.obj(s, strict=True)
 
 
@@ -641,7 +642,10 @@ def scan_report(sid: int) -> dict[str, Any]:
 def scan_agents(sid: int) -> dict[str, Any]:
     scan = _scan_or_404(sid)
     rd = _run_dir(scan)
-    return vault.scan_redactor(scan).obj(runs.agents(rd), True) if rd else {"agents": [], "counts": {}}
+    if not rd:
+        return {"agents": [], "counts": {}}
+    data = runs.settle_agents(runs.agents(rd), scan["status"], scan["status"] in runner.ACTIVE)
+    return vault.scan_redactor(scan).obj(data, True)
 
 
 @app.get("/api/scans/{sid}/activity")
@@ -651,7 +655,7 @@ def scan_activity(sid: int, after: int = -1, agent_id: str | None = None, limit:
 
 
 @app.get("/api/scans/{sid}/messages")
-def scan_messages(sid: int) -> dict[str, Any]:
+def scan_messages(sid: int, agent_id: str | None = None, limit: int = 100) -> dict[str, Any]:
     scan = _scan_or_404(sid)
     if scan.get("control_mode") == "bridge" and scan["status"] in runner.ACTIVE:
         control.sync(scan)
@@ -666,9 +670,31 @@ def scan_messages(sid: int) -> dict[str, Any]:
                        else "The scan's control endpoint did not answer.")
     red = vault.scan_redactor(scan)
     out["agents"] = red.obj(out["agents"], strict=True)
-    out["messages"] = control.history(scan, red)
+    out["messages"] = [control.instruction_view(m) for m in control.history(scan, red, agent_id, min(limit, 500))]
+    out["application_policy"] = control.APPLICATION
     return out
 
+
+@app.get("/api/scans/{sid}/messages/{mid}/activity")
+def scan_message_activity(sid: int, mid: int, limit: int = 60, after: int | None = None) -> dict[str, Any]:
+    """The target agent's visible activity after the instruction entered its context, located by the message
+    marker in that agent's own session. Shown for review only; it is not evidence that the instruction was applied."""
+    scan = _scan_or_404(sid)
+    row = db.get("agent_messages", mid)
+    if not row or row["scan_id"] != sid:
+        bad("Message not found", 404)
+    rd = _run_dir(scan)
+    pos = control.marker_position(rd, row["agent_id"], row["request_id"]) if row["state"] == "delivered" else None
+    base = {"message_id": mid, "agent_id": row["agent_id"], "marker_found": pos is not None,
+            "application": control.APPLICATION, "items": [], "cursor": after}
+    if pos is None:
+        base["reason"] = ("The message is not in the agent's context, so there is no following activity."
+                          if row["state"] != "delivered" else
+                          "The message marker was not found in the agent's recorded session (the run folder may be "
+                          "missing, or Strix rebuilt the session after a crash).")
+        return base
+    r = activity.read(rd, vault.scan_redactor(scan), after if after is not None else pos, row["agent_id"], limit)
+    return {**base, **r, "marker_position": pos}
 
 @app.post("/api/scans/{sid}/messages")
 def scan_message_send(sid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
@@ -702,6 +728,61 @@ def scan_message_recheck(sid: int, mid: int) -> dict[str, Any]:
     except (FileExistsError, ValueError) as e:
         bad(str(e))
     return control.out_row(db.get("agent_messages", out["id"]), vault.scan_redactor(scan))
+
+
+@app.get("/api/scans/{sid}/session-health")
+def scan_session_health(sid: int) -> dict[str, Any]:
+    scan = _scan_or_404(sid)
+    return session_health.for_scan(scan, _run_dir(scan))
+
+
+@app.get("/api/scans/{sid}/exchanges/{request_id}")
+def scan_exchange(sid: int, request_id: str) -> dict[str, Any]:
+    """One recorded HTTP exchange of this scan's run, masked (source behind session-health / coverage / timeline)."""
+    from . import evidence
+    scan = _scan_or_404(sid)
+    rd = _run_dir(scan)
+    x = evidence.load(rd).get(request_id) if rd else None
+    if not x:
+        bad("No recorded exchange with this id in the run.", 404)
+    return evidence.public(x, vault.scan_redactor(scan), scan.get("run_name") or "")
+
+
+@app.get("/api/scans/{sid}/coverage-matrix")
+def scan_coverage_matrix(sid: int) -> dict[str, Any]:
+    scan = _scan_or_404(sid)
+    return coverage_matrix.build(scan, _run_dir(scan))
+
+
+@app.get("/api/scans/{sid}/timeline")
+def scan_timeline(sid: int, kinds: str = "", agent_id: str | None = None, q: str = "", offset: int = 0,
+                  limit: int = 200, seen_after: str | None = None) -> dict[str, Any]:
+    """Recorded events only. Reading (or replaying) the timeline never re-runs anything."""
+    scan = _scan_or_404(sid)
+    ks = [k for k in kinds.split(",") if k in timeline.KINDS] if kinds else None
+    try:
+        return timeline.page(scan, _run_dir(scan), ks, agent_id, q, offset, limit, seen_after)
+    except ValueError as e:
+        bad(str(e))
+
+
+@app.get("/api/scans/{sid}/browser")
+def scan_browser(sid: int, agent_id: str = "") -> dict[str, Any]:
+    scan = _scan_or_404(sid)
+    return browser.view(scan, _run_dir(scan), agent_id, vault.scan_redactor(scan))
+
+
+@app.get("/api/compare")
+def scans_compare(reference: int, comparison: int) -> dict[str, Any]:
+    try:
+        out = compare.compare(reference, comparison)
+    except LookupError as e:
+        bad(str(e), 404)
+    except ValueError as e:
+        bad(str(e))
+    for sid in (reference, comparison):
+        out = vault.scan_redactor(db.get_scan(sid) or {}).obj(out, True)
+    return out
 
 
 @app.get("/api/scans/{sid}/log")
@@ -1052,6 +1133,64 @@ def finding_verify(gid: int, body: dict[str, Any] = Body(default={})) -> dict[st
         bad(str(e))
     row = db.q1("SELECT * FROM finding_verifications WHERE scan_id=?", (sid,))
     return {"verification": verify.public(row), "scan_id": sid}
+
+
+# ---------------------------------------------------------------- evidence workspace (SKY-07)
+def _ws(fn, *a, **k):
+    try:
+        return fn(*a, **k)
+    except LookupError as e:
+        bad(str(e), 404)
+    except ValueError as e:
+        bad(str(e))
+
+
+@app.get("/api/findings/{gid}/workspace")
+def finding_workspace(gid: int, occurrence_id: int | None = None, verification_id: int | None = None) -> dict[str, Any]:
+    return _ws(workspace.build, gid, occurrence_id, verification_id)
+
+
+@app.get("/api/findings/{gid}/diff")
+def finding_diff(gid: int, left: str, right: str, part: str = "response") -> dict[str, Any]:
+    if ":" not in left or ":" not in right:
+        bad("Select two recorded exchanges.")
+    return vault.finding_redactor(gid).obj(_ws(workspace.diff, gid, left, right, part), True)
+
+
+@app.get("/api/findings/{gid}/exchanges/{run_name}/{request_id}/download")
+def finding_exchange_download(gid: int, run_name: str, request_id: str) -> Response:
+    text = vault.finding_redactor(gid).text(_ws(workspace.download_text, gid, run_name, request_id), True)
+    safe = "".join(ch for ch in f"{run_name}_{request_id}" if ch.isalnum() or ch in "-_")
+    return Response(text, media_type="text/plain; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{safe}_masked.txt"'})
+
+
+@app.post("/api/findings/{gid}/notes")
+def finding_note_add(gid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    db.get("finding_groups", gid) or bad("Finding not found", 404)
+    _ws(workspace.add_note, gid, body.get("body"), auth.ADMIN_USER, body.get("occurrence_id") or None,
+        body.get("verification_id") or None)
+    return {"notes": workspace.notes(gid)}
+
+
+@app.put("/api/findings/{gid}/notes/{nid}")
+def finding_note_edit(gid: int, nid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    _ws(workspace.edit_note, gid, nid, body.get("body"), auth.ADMIN_USER)
+    return {"notes": workspace.notes(gid)}
+
+
+@app.post("/api/findings/{gid}/labels")
+def finding_label(gid: int, body: dict[str, Any] = Body(...)) -> dict[str, bool]:
+    db.get("finding_groups", gid) or bad("Finding not found", 404)
+    _ws(workspace.set_label, gid, str(body.get("run_name") or ""), str(body.get("request_id") or ""),
+        str(body.get("label") or ""), auth.ADMIN_USER, body.get("occurrence_id") or None)
+    return {"ok": True}
+
+
+@app.post("/api/findings/{gid}/occurrences/{oid}/review")
+def finding_occurrence_review(gid: int, oid: int, body: dict[str, Any] = Body(...)) -> dict[str, bool]:
+    _ws(workspace.review, gid, oid, str(body.get("decision") or ""), str(body.get("note") or ""), auth.ADMIN_USER)
+    return {"ok": True}
 
 
 @app.patch("/api/findings/{gid}")

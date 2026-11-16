@@ -25,8 +25,24 @@ def _decode(value: Any) -> Any:
     return value
 
 
+IMAGE_WITHHELD = "[Screenshot withheld by Skynet: credentials or personal data inside images cannot be masked]"
+
+
+def strip_images(value: Any) -> Any:
+    """Replace image blocks (view_image output) with a placeholder; pixels and base64 data never leave Skynet."""
+    if isinstance(value, list):
+        return [{"type": "input_text", "text": IMAGE_WITHHELD}
+                if isinstance(b, dict) and b.get("type") in ("input_image", "image", "output_image") else strip_images(b)
+                for b in value]
+    if isinstance(value, dict):
+        return {k: strip_images(v) for k, v in value.items()}
+    if isinstance(value, str) and value.startswith("data:image/"):
+        return IMAGE_WITHHELD
+    return value
+
+
 def _text(value: Any, red: Redactor) -> tuple[str, bool]:
-    value = red.obj(_decode(value), strict=True)
+    value = red.obj(strip_images(_decode(value)), strict=True)
     raw = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, indent=2)
     # Mask before truncation: truncation must not split and expose a secret prefix.
     raw = red.text(raw, strict=True)
