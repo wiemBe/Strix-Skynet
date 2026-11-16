@@ -96,10 +96,11 @@ def _load_key() -> bytes:
     # A missing key with existing encrypted data is a recovery problem, not a first installation.
     # Refuse to replace it silently (also protects partially restored data directories).
     if DB_PATH.exists():
-        with closing(sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)) as c:
+        with closing(sqlite3.connect(DB_PATH.resolve().as_uri() + "?mode=ro", uri=True)) as c:
             tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             for table, column in (("llm_profiles", "api_key_enc"), ("targets", "auth_secret_enc"),
-                                  ("auth_profiles", "secret_enc"), ("scans", "redact_enc")):
+                                  ("auth_profiles", "secret_enc"), ("scans", "redact_enc"),
+                                  ("agent_messages", "content_enc"), ("analyst_note_revisions", "body_enc")):
                 cols = {r[1] for r in c.execute(f"PRAGMA table_info({table})")} if table in tables else set()
                 if column in cols and c.execute(f"SELECT 1 FROM {table} WHERE COALESCE({column},'')<>'' LIMIT 1").fetchone():
                     raise RuntimeError("Encryption key is missing. A new key will not be generated while encrypted records exist. Restore the existing key.")

@@ -147,7 +147,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--disposable-qa", action="store_true")
     args = parser.parse_args()
-    if not args.disposable_qa or platform.system() != "Linux" or not Path("/.dockerenv").exists():
+    container = Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()
+    if not args.disposable_qa or platform.system() != "Linux" or not container:
         parser.error("Use --disposable-qa inside a dedicated Linux QA container.")
     ip = socket.gethostbyname(socket.gethostname())
     with tempfile.TemporaryDirectory(prefix="skynet-nginx-qa-") as tmp:

@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 from cryptography.fernet import Fernet
 
@@ -28,6 +29,20 @@ relocation = module("relocate_runs")
 
 
 class TestDeployment(unittest.TestCase):
+    def test_doctor_reports_a_false_capability_as_failed(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            args = SimpleNamespace(data=root / "data", key_file=root / "keys/key",
+                                   strix=str(root / "strix"), runtime=root / "python",
+                                   workdir=None, skip_docker=True)
+            with mock.patch.object(doctor, "sqlite_json_check", return_value=False):
+                result = doctor.check(args)
+            check = next(c for c in result["checks"] if c["check"] == "sqlite_json")
+            self.assertFalse(check["ok"], check)
+            self.assertFalse(result["ok"])
+            self.assertFalse(args.data.exists())
+            self.assertFalse(args.key_file.exists())
+
     def test_relocation_is_reviewable_backed_up_and_idempotent(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

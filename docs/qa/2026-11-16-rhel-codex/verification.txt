@@ -1,0 +1,12 @@
+RHEL UBI9 x86_64 / Python 3.12.15
+systemd-analyze verify /opt/skynet/deploy/rhel/skynet.service: exit 0, no diagnostics
+.venv/bin/python -m pip check: No broken requirements found.
+.strix-runtime/bin/python -m pip check: No broken requirements found.
+bash -n run.sh scripts/setup_strix.sh scripts/install_rhel.sh: exit 0
+.venv/bin/python -m compileall -q skynet scripts tests: exit 0
+node --check skynet/static/app.js: exit 0
+node --check skynet/static/sky.js: exit 0
+node --check skynet/static/login.js: exit 0
+git diff --check: exit 0
+service_lifecycle_check.py without --disposable-qa: refused before starting app
+qa_nginx.py without --disposable-qa: refused before starting app/proxy
