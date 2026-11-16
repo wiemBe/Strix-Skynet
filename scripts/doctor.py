@@ -76,7 +76,7 @@ def check(args) -> dict:
     def add(name, fn):
         try:
             value = fn()
-            ok, detail = value if isinstance(value, tuple) else (True, str(value))
+            ok, detail = value if isinstance(value, tuple) else (bool(value), str(value))
         except Exception as e:
             ok, detail = False, f"{type(e).__name__}: {e}" if isinstance(e, (ValueError, FileNotFoundError)) else type(e).__name__
         checks.append({"check": name, "ok": bool(ok), "detail": detail})

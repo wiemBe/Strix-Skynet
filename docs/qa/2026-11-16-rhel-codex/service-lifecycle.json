@@ -1,0 +1,110 @@
+{
+  "platform": "Linux-7.3.3-200.fc44.x86_64-x86_64-with-glibc2.34",
+  "python": "3.12.15",
+  "lifecycle": [
+    {
+      "ok": true,
+      "mode": "create",
+      "ids": {
+        "target": 1,
+        "auth": 1,
+        "campaign": 1,
+        "schedule": 1,
+        "provider": 1
+      },
+      "schema_version": 7,
+      "secret_readable": true,
+      "secret_returned": false,
+      "schedules_enabled": false,
+      "scans_started": 0,
+      "provider_calls": 0
+    },
+    {
+      "ok": true,
+      "mode": "verify",
+      "ids": {
+        "target": 1,
+        "auth": 1,
+        "campaign": 1,
+        "schedule": 1,
+        "provider": 1
+      },
+      "schema_version": 7,
+      "secret_readable": true,
+      "secret_returned": false,
+      "schedules_enabled": false,
+      "scans_started": 0,
+      "provider_calls": 0
+    }
+  ],
+  "key_and_ciphertext_preserved_after_restart": true,
+  "sqlite_integrity": "ok",
+  "doctor": {
+    "ok": true,
+    "docker_checked": false,
+    "scan_started": false,
+    "checks": [
+      {
+        "check": "platform",
+        "ok": true,
+        "detail": "Linux/x86_64 \u00b7 libc ('glibc', '2.34')"
+      },
+      {
+        "check": "python",
+        "ok": true,
+        "detail": "3.12.15"
+      },
+      {
+        "check": "timezone",
+        "ok": true,
+        "detail": "Europe/Istanbul"
+      },
+      {
+        "check": "password_hash",
+        "ok": true,
+        "detail": "True"
+      },
+      {
+        "check": "dependencies",
+        "ok": true,
+        "detail": "fastapi=0.163.0, uvicorn=0.54.0, apscheduler=3.11.3, cryptography=50.0.2, markdown-it-py=4.3.0"
+      },
+      {
+        "check": "sqlite_json",
+        "ok": true,
+        "detail": "True"
+      },
+      {
+        "check": "strix_binary",
+        "ok": true,
+        "detail": "strix 1.7.0"
+      },
+      {
+        "check": "messaging_runtime",
+        "ok": true,
+        "detail": "Strix 1.7.0; native coordinator and SDK filter available"
+      },
+      {
+        "check": "encryption",
+        "ok": true,
+        "detail": "Existing key is valid; checked 1 encrypted records without showing their contents."
+      },
+      {
+        "check": "data",
+        "ok": true,
+        "detail": "Existing directory or nearest parent is writable."
+      },
+      {
+        "check": "key_directory",
+        "ok": true,
+        "detail": "Existing directory or nearest parent is writable."
+      },
+      {
+        "check": "workdir",
+        "ok": true,
+        "detail": "Existing directory or nearest parent is writable."
+      }
+    ]
+  },
+  "scope": "Disposable UBI9; real application lifespan; no host volumes, Docker socket or external scan"
+}

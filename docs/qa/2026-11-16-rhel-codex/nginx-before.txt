@@ -1,0 +1,2 @@
+usage: qa_nginx.py [-h] [--disposable-qa]
+qa_nginx.py: error: Use --disposable-qa inside a dedicated Linux QA container.

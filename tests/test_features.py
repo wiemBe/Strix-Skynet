@@ -549,13 +549,30 @@ class TestDataIntegrity(unittest.TestCase):
 
     def test_missing_key_never_replaced_with_encrypted_data(self):
         from unittest.mock import patch
-        with tempfile.TemporaryDirectory(prefix="skynet-key-") as tmp:
+        for table, column in (("llm_profiles", "api_key_enc"), ("targets", "auth_secret_enc"),
+                              ("auth_profiles", "secret_enc"), ("scans", "redact_enc"),
+                              ("agent_messages", "content_enc"), ("analyst_note_revisions", "body_enc")):
+            with self.subTest(table=table), tempfile.TemporaryDirectory(prefix="skynet-key-") as tmp:
+                p=Path(tmp)
+                with closing(sqlite3.connect(p/'db')) as c, c:
+                    c.execute(f"CREATE TABLE {table}({column} TEXT)")
+                    c.execute(f"INSERT INTO {table} VALUES('ciphertext')")
+                before=(p/'db').read_bytes()
+                with patch.multiple(crypto,SECRET_KEY="",SECRET_KEY_FILE=p/'missing.key',LEGACY_SECRET_KEY_FILE=p/'missing-legacy.key',DB_PATH=p/'db'):
+                    with self.assertRaises(RuntimeError): crypto._load_key()
+                    self.assertFalse((p/'missing.key').exists())
+                    self.assertEqual((p/'db').read_bytes(),before)
+
+    def test_missing_key_check_handles_sqlite_uri_characters_in_data_path(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory(prefix="skynet-key-#?-") as tmp:
             p=Path(tmp)
             with closing(sqlite3.connect(p/'db')) as c, c:
                 c.execute("CREATE TABLE llm_profiles(api_key_enc TEXT)")
                 c.execute("INSERT INTO llm_profiles VALUES('ciphertext')")
             with patch.multiple(crypto,SECRET_KEY="",SECRET_KEY_FILE=p/'missing.key',LEGACY_SECRET_KEY_FILE=p/'missing-legacy.key',DB_PATH=p/'db'):
-                with self.assertRaises(RuntimeError): crypto._load_key()
+                with self.assertRaisesRegex(RuntimeError,"Encryption key is missing"):
+                    crypto._load_key()
                 self.assertFalse((p/'missing.key').exists())
 
     def test_backups_include_committed_wal_before_migration(self):

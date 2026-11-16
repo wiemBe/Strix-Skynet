@@ -1,0 +1,103 @@
+test_activity_requires_session (test_features.TestAPI.test_activity_requires_session) ... ok
+test_invalid_inputs_do_not_create_scans (test_features.TestAPI.test_invalid_inputs_do_not_create_scans) ... ok
+test_legacy_verdict_reclassified_without_rerun (test_features.TestAPI.test_legacy_verdict_reclassified_without_rerun) ... ok
+test_verification_options_queue_cancel_and_history (test_features.TestAPI.test_verification_options_queue_cancel_and_history) ... ok
+test_verification_requires_csrf (test_features.TestAPI.test_verification_requires_csrf) ... ok
+test_agent_filter (test_features.TestActivity.test_agent_filter) ... ok
+test_current_historical_and_unknown_header_secrets (test_features.TestActivity.test_current_historical_and_unknown_header_secrets) ... ok
+test_cursor_is_incremental_and_idempotent (test_features.TestActivity.test_cursor_is_incremental_and_idempotent) ... ok
+test_empty_and_missing_store_are_distinct (test_features.TestActivity.test_empty_and_missing_store_are_distinct) ... ok
+test_mask_before_truncation (test_features.TestActivity.test_mask_before_truncation) ... ok
+test_only_visible_assistant_and_tools (test_features.TestActivity.test_only_visible_assistant_and_tools) ... ok
+test_tail_and_pagination (test_features.TestActivity.test_tail_and_pagination) ... ok
+test_tool_output_name_across_pages (test_features.TestActivity.test_tool_output_name_across_pages) ... ok
+test_backups_include_committed_wal_before_migration (test_features.TestDataIntegrity.test_backups_include_committed_wal_before_migration) ... ok
+test_boolean_session_evidence_is_not_a_secret (test_features.TestDataIntegrity.test_boolean_session_evidence_is_not_a_secret) ... ok
+test_idempotent_finding_and_inventory_ingest (test_features.TestDataIntegrity.test_idempotent_finding_and_inventory_ingest) ... ok
+test_missing_key_check_handles_sqlite_uri_characters_in_data_path (test_features.TestDataIntegrity.test_missing_key_check_handles_sqlite_uri_characters_in_data_path) ... FAIL
+test_missing_key_never_replaced_with_encrypted_data (test_features.TestDataIntegrity.test_missing_key_never_replaced_with_encrypted_data) ...
+  test_missing_key_never_replaced_with_encrypted_data (test_features.TestDataIntegrity.test_missing_key_never_replaced_with_encrypted_data) (table='agent_messages') ... FAIL
+  test_missing_key_never_replaced_with_encrypted_data (test_features.TestDataIntegrity.test_missing_key_never_replaced_with_encrypted_data) (table='analyst_note_revisions') ... FAIL
+test_missing_metrics_and_measured_zero (test_features.TestDataIntegrity.test_missing_metrics_and_measured_zero) ... ok
+test_same_second_rotation_invalidates_redaction_cache (test_features.TestDataIntegrity.test_same_second_rotation_invalidates_redaction_cache) ... ok
+test_locate_uses_hostmap (test_features.TestFingerprint.test_locate_uses_hostmap) ... ok
+test_stable_and_distinct (test_features.TestFingerprint.test_stable_and_distinct) ... ok
+test_inline_auth_migration (test_features.TestMigration.test_inline_auth_migration) ... ok
+test_llm_key (test_features.TestRedact.test_llm_key) ... ok
+test_short_secrets_are_masked (test_features.TestRedact.test_short_secrets_are_masked) ... ok
+test_strict_patterns (test_features.TestRedact.test_strict_patterns) ... ok
+test_value_and_variants (test_features.TestRedact.test_value_and_variants) ... ok
+test_host_map (test_features.TestScope.test_host_map) ... ok
+test_label (test_features.TestScope.test_label) ... ok
+test_norm_path (test_features.TestScope.test_norm_path) ... ok
+test_split (test_features.TestScope.test_split) ... ok
+test_valid_host (test_features.TestScope.test_valid_host) ... ok
+test_classify (test_features.TestTelemetryParse.test_classify) ... ok
+test_cost_source (test_features.TestTelemetryParse.test_cost_source) ... ok
+test_local_to_utc (test_features.TestTelemetryParse.test_local_to_utc) ... ok
+test_parse_log (test_features.TestTelemetryParse.test_parse_log) ... ok
+test_asset_evidence_remains_text (test_features.TestVerificationLifecycle.test_asset_evidence_remains_text) ... ok
+test_finish_does_not_re_resolve_rotated_vault (test_features.TestVerificationLifecycle.test_finish_does_not_re_resolve_rotated_vault) ... ok
+test_launch_failure_finishes_verification (test_features.TestVerificationLifecycle.test_launch_failure_finishes_verification) ... ok
+test_missing_original_file_still_masks_rotated_secret (test_features.TestVerificationLifecycle.test_missing_original_file_still_masks_rotated_secret) ... ok
+test_private_snapshot_never_returned (test_features.TestVerificationLifecycle.test_private_snapshot_never_returned) ... ok
+test_profile_binding_survives_redacted_snapshot (test_features.TestVerificationLifecycle.test_profile_binding_survives_redacted_snapshot) ... ok
+test_queued_cancel_finishes_verification (test_features.TestVerificationLifecycle.test_queued_cancel_finishes_verification) ... ok
+test_repeated_enqueue_does_not_duplicate (test_features.TestVerificationLifecycle.test_repeated_enqueue_does_not_duplicate) ... ok
+test_scan_and_verification_are_atomic (test_features.TestVerificationLifecycle.test_scan_and_verification_are_atomic) ... ok
+test_terminal_recovery_and_idempotence (test_features.TestVerificationLifecycle.test_terminal_recovery_and_idempotence) ... ok
+test_anonymous_completed_test (test_features.TestVerifyClassify.test_anonymous_completed_test) ... ok
+test_authenticated_negative_requires_in_run_identity (test_features.TestVerifyClassify.test_authenticated_negative_requires_in_run_identity) ... ok
+test_bodiless_compatibility_never_accepts_missing_bodies_or_partial_pages (test_features.TestVerifyClassify.test_bodiless_compatibility_never_accepts_missing_bodies_or_partial_pages) ... ok
+test_caido_complete_bodiless_get_is_valid_evidence (test_features.TestVerifyClassify.test_caido_complete_bodiless_get_is_valid_evidence) ... ok
+test_cancel_and_interrupt_never_become_negative (test_features.TestVerifyClassify.test_cancel_and_interrupt_never_become_negative) ... ok
+test_clean_exit_without_evidence_is_inconclusive (test_features.TestVerifyClassify.test_clean_exit_without_evidence_is_inconclusive) ... ok
+test_contradictory_negative_is_inconclusive (test_features.TestVerifyClassify.test_contradictory_negative_is_inconclusive) ... ok
+test_denied_access_is_inconclusive (test_features.TestVerifyClassify.test_denied_access_is_inconclusive) ... ok
+test_endpoint_200_without_assessment_is_inconclusive (test_features.TestVerifyClassify.test_endpoint_200_without_assessment_is_inconclusive) ... ok
+test_fingerprint_only_is_inconclusive (test_features.TestVerifyClassify.test_fingerprint_only_is_inconclusive) ... ok
+test_form_login_without_proof_is_inconclusive (test_features.TestVerifyClassify.test_form_login_without_proof_is_inconclusive) ... ok
+test_login_page_200_is_inconclusive (test_features.TestVerifyClassify.test_login_page_200_is_inconclusive) ... ok
+test_marker_in_arguments_is_not_result (test_features.TestVerifyClassify.test_marker_in_arguments_is_not_result) ... ok
+test_missing_full_response (test_features.TestVerifyClassify.test_missing_full_response) ... ok
+test_one_request_is_not_a_test (test_features.TestVerifyClassify.test_one_request_is_not_a_test) ... ok
+test_out_of_scope_evidence_is_inconclusive (test_features.TestVerifyClassify.test_out_of_scope_evidence_is_inconclusive) ... ok
+test_redirect_is_inconclusive (test_features.TestVerifyClassify.test_redirect_is_inconclusive) ... ok
+test_reverified_needs_new_linked_finding (test_features.TestVerifyClassify.test_reverified_needs_new_linked_finding) ... ok
+test_reverified_without_poc_is_inconclusive (test_features.TestVerifyClassify.test_reverified_without_poc_is_inconclusive) ... ok
+test_session_expired_during_probe (test_features.TestVerifyClassify.test_session_expired_during_probe) ... ok
+test_technical_failure (test_features.TestVerifyClassify.test_technical_failure) ... ok
+test_test_incomplete (test_features.TestVerifyClassify.test_test_incomplete) ... ok
+test_wrong_current_credential_is_inconclusive (test_features.TestVerifyClassify.test_wrong_current_credential_is_inconclusive) ... ok
+
+======================================================================
+FAIL: test_missing_key_check_handles_sqlite_uri_characters_in_data_path (test_features.TestDataIntegrity.test_missing_key_check_handles_sqlite_uri_characters_in_data_path)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/skynet/tests/test_features.py", line 574, in test_missing_key_check_handles_sqlite_uri_characters_in_data_path
+    with self.assertRaisesRegex(RuntimeError,"Encryption key is missing"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: RuntimeError not raised
+
+======================================================================
+FAIL: test_missing_key_never_replaced_with_encrypted_data (test_features.TestDataIntegrity.test_missing_key_never_replaced_with_encrypted_data) (table='agent_messages')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/skynet/tests/test_features.py", line 562, in test_missing_key_never_replaced_with_encrypted_data
+    with self.assertRaises(RuntimeError): crypto._load_key()
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: RuntimeError not raised
+
+======================================================================
+FAIL: test_missing_key_never_replaced_with_encrypted_data (test_features.TestDataIntegrity.test_missing_key_never_replaced_with_encrypted_data) (table='analyst_note_revisions')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/skynet/tests/test_features.py", line 562, in test_missing_key_never_replaced_with_encrypted_data
+    with self.assertRaises(RuntimeError): crypto._load_key()
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: RuntimeError not raised
+
+----------------------------------------------------------------------
+Ran 69 tests in 4.558s
+
+FAILED (failures=3)

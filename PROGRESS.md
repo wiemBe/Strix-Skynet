@@ -1,6 +1,23 @@
 # Skynet — çalışma takibi
 
-Güncelleme: 16 Kasım 2026 · Europe/Istanbul (son çalışma: düzeltmeler ve Nginx'in main'e birleştirilmesi)
+Güncelleme: 16 Kasım 2026 · Europe/Istanbul (son çalışma: Fedora üzerinde rootless Podman / RHEL UBI 9 yeniden testi)
+
+## RHEL UBI 9 yeniden testi ve düzeltmeler — Codex, 16 Kasım 2026
+
+- [x] `wiemBe/Strix-Skynet` reposu `09ad607` commit'inden klonlandı; çalışma branch'i `fix/rhel-qa`.
+- [x] Resmi, digest ile sabitlenmiş UBI 9 x86_64 imajı oluşturuldu. Python 3.12.15 / glibc 2.34;
+  başlangıçta **191 test**, düzeltme ve ek regresyonlarla **193 test** geçti. Native Strix testleri atlanmadı.
+- [x] Doctor'ın `False` dönen yetenek kontrolünü başarılı sayması düzeltildi.
+- [x] Eksik anahtar koruması şifreli ajan mesajlarını ve analist not revizyonlarını da kapsıyor;
+  yalnız bu kayıtlar kalsa bile yeni anahtar oluşturulmuyor. SQLite URI özel karakterleri olan veri yolları düzeltildi.
+- [x] Nginx QA, Podman'ın `/run/.containerenv` işaretini tanıyor. Gerçek Nginx 1.20.1 üzerinde HTTP/HTTPS,
+  giriş/oturum, CSRF, CIDR, Secure cookie, forwarded header, TLS SAN/CA ve kapalı backend kontrolleri geçti.
+- [x] Tam uygulama başlangıcı → fixture kayıtları → kapat/aç → kayıtları doğrula; anahtar ve şifreli değerler
+  değişmedi. SQLite integrity ve Docker hariç tüm doctor kontrolleri geçti.
+- [x] RHEL systemd 252 ile unit doğrulaması, iki ortamda pip check, Python/JS/shell sözdizimi geçti.
+- [x] Önce/sonra kanıtları ve tekrar komutları: [QA raporu](docs/qa/2026-11-16-rhel-codex/README.md).
+- Gerçek RHEL host boot/systemd, SELinux enforcing, firewalld ve Docker sandbox pentesti yapılmadı.
+  Host verileri/anahtarları paylaşılmadı; LLM veya dış hedef taraması başlatılmadı.
 
 ## Main entegrasyonu — Codex, 16 Kasım 2026
 

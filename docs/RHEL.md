@@ -147,6 +147,20 @@ docker build --platform linux/amd64 -f deploy/rhel/Containerfile.qa -t skynet-rh
 docker run --rm --platform linux/amd64 skynet-rhel9-qa:local
 ```
 
+QA imajı Docker yerine rootless Podman ile de çalıştırılabilir:
+
+```sh
+podman build --platform linux/amd64 -f deploy/rhel/Containerfile.qa -t localhost/skynet-rhel9-qa:local .
+podman run --rm --platform linux/amd64 localhost/skynet-rhel9-qa:local
+podman build --platform linux/amd64 -f deploy/rhel/Containerfile.nginx-qa -t localhost/skynet-nginx-qa:local .
+podman run --rm --workdir /opt/skynet localhost/skynet-nginx-qa:local \
+  .venv/bin/python scripts/qa_nginx.py --disposable-qa
+```
+
+Bu Podman desteği yalnız QA içindir; üretim Strix sandbox'ının Podman API ile uyumlu olduğu anlamına gelmez.
+[16 Kasım yeniden test ve düzeltme kaydı](qa/2026-11-16-rhel-codex/README.md): 193 test,
+gerçek HTTP/HTTPS proxy ve uygulama yeniden başlatma/şifreli veri kalıcılığı kontrolleri geçti.
+
 Bu imaj resmi Red Hat UBI 9 / Python 3.12 tabanıdır; host veri/anahtarları ve Docker soketi paylaşılmaz.
 Unit/API/native SDK testleri gerçek LLM/Docker sandbox pentesti başlatmaz.
 `scripts/qa_http.py` yalnız **ayrı, boş bir QA servisine** `--disposable-qa` ile kullanılmalıdır;

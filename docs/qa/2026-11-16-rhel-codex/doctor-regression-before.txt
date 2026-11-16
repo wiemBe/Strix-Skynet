@@ -1,0 +1,22 @@
+test_doctor_missing_key_never_generates_one (test_deployment.TestDeployment.test_doctor_missing_key_never_generates_one) ... ok
+test_doctor_preserves_the_virtualenv_interpreter_path (test_deployment.TestDeployment.test_doctor_preserves_the_virtualenv_interpreter_path) ... ok
+test_doctor_reports_a_false_capability_as_failed (test_deployment.TestDeployment.test_doctor_reports_a_false_capability_as_failed) ... FAIL
+test_doctor_verifies_master_and_vault_key_without_leaking_or_writing (test_deployment.TestDeployment.test_doctor_verifies_master_and_vault_key_without_leaking_or_writing) ... ok
+test_failed_force_install_restores_old_runtime_and_leaves_data_alone (test_deployment.TestDeployment.test_failed_force_install_restores_old_runtime_and_leaves_data_alone) ... ok
+test_official_artifacts_match_platform_and_checksums (test_deployment.TestDeployment.test_official_artifacts_match_platform_and_checksums) ... ok
+test_relocation_is_reviewable_backed_up_and_idempotent (test_deployment.TestDeployment.test_relocation_is_reviewable_backed_up_and_idempotent) ... ok
+test_service_uses_one_queue_owner_and_shared_docker_temp_paths (test_deployment.TestDeployment.test_service_uses_one_queue_owner_and_shared_docker_temp_paths) ... ok
+test_tampering_fails_before_any_environment_change (test_deployment.TestDeployment.test_tampering_fails_before_any_environment_change) ... ok
+
+======================================================================
+FAIL: test_doctor_reports_a_false_capability_as_failed (test_deployment.TestDeployment.test_doctor_reports_a_false_capability_as_failed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/skynet/tests/test_deployment.py", line 41, in test_doctor_reports_a_false_capability_as_failed
+    self.assertFalse(check["ok"], check)
+AssertionError: True is not false : {'check': 'sqlite_json', 'ok': True, 'detail': 'False'}
+
+----------------------------------------------------------------------
+Ran 9 tests in 0.188s
+
+FAILED (failures=1)
