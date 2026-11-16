@@ -1,6 +1,15 @@
 # Skynet — çalışma takibi
 
-Güncelleme: 16 Kasım 2026 · Europe/Istanbul (son çalışma: Fedora üzerinde rootless Podman / RHEL UBI 9 yeniden testi)
+Güncelleme: 17 Kasım 2026 · Europe/Istanbul (son çalışma: README ekran görüntüleri ve kullanım rehberi)
+
+## README ekran görüntüleri — Codex, 17 Kasım 2026
+
+- [x] Güncel uygulamadan altı yeni görüntü: hedef detayları, kampanya, envanter, kimlik profilleri,
+  yönetim raporu ve audit log. README'ye açıklamalı galeri ve ilk kullanım adımları eklendi.
+- [x] Ayrı UBI 9 demo veritabanı kullanıldı; örnek veriler açıkça etiketlendi. Canlı tarama/sağlayıcı isteği yok.
+- [x] 1600 × 1050 ve 1366 × 768 görünüm kontrolünde yatay taşma veya JavaScript hatası görülmedi;
+  tüm görseller incelendi. Uygulama kodu değişmedi; mevcut 193 testlik backend kaydına bağlantı eklendi.
+- Görseller ve kaynak/kontrol bilgileri: [docs/screenshots](docs/screenshots/README.md).
 
 ## RHEL UBI 9 yeniden testi ve düzeltmeler — Codex, 16 Kasım 2026
 
