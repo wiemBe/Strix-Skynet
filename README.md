@@ -1,13 +1,47 @@
 # Skynet
 
-Güncel çalışma ve doğrulama takibi: [PROGRESS.md](PROGRESS.md). Arayüz dili İngilizce, varsayılan saat dilimi Europe/Istanbul.
-
-Kullanıcının seçtiği özellikler ve kabul ölçütleri: [FEATURE_BACKLOG.md](docs/FEATURE_BACKLOG.md). Uygulama durumu,
-testler ve kalan maddeler PROGRESS.md içindeki "SKY-01…07" bölümünde.
-
 Skynet, uygulamaları production'a çıkmadan önce ve sonrasında düzenli aralıklarla pentestten geçirmek için
 kullanılan web tabanlı yönetim arayüzüdür. Pentest motoru olarak makinede kurulu **[Strix](https://github.com/usestrix/strix)**
 CLI'ını kullanır; Strix'i yeniden yazmaz, yalnızca taramaları başlatır, izler, zamanlar ve sonuçlarını gösterir.
+
+Arayüz dili İngilizce, varsayılan saat dilimi **Europe/Istanbul**. FastAPI, SQLite ve harici CDN gerektirmeyen
+bir web arayüzüyle çalışır.
+
+[Ekran görüntüleri](#ekran-görüntüleri) · [Kurulum](#kurulum) · [RHEL rehberi](docs/RHEL.md) ·
+[Nginx / HTTPS](docs/NGINX.md) · [Test ve doğrulama](#test-ve-doğrulama)
+
+## Ekran görüntüleri
+
+17 Kasım 2026'da güncel uygulamadan alınan görüntülerdir. **Hedefler, tarama geçmişi ve bulgular ayrı bir
+demo veritabanındaki örnek kayıtlardır; gerçek müşteri verisi veya canlı tarama sonucu değildir.**
+Görüntüler 1600 × 1050 tarayıcı penceresinde alındı; raporun tamamı gösterilir.
+
+**Hedef detayları:** bulgu grupları, tarama geçmişi, kapsam ve kimlik profilleri tek sayfada.
+
+![Skynet hedef detayları: Demo Storefront, bulgu durumları, tarama geçmişi ve kapsam](docs/screenshots/target-details.jpg)
+
+| Kampanya yönetimi | Keşif envanteri |
+| --- | --- |
+| [![Hedefleri, taramaları ve bulguları bir araya getiren kampanya görünümü](docs/screenshots/campaign.jpg)](docs/screenshots/campaign.jpg) | [![Host, servis, endpoint ve teknolojileri kapsam ve kanıt düzeyiyle gösteren envanter](docs/screenshots/inventory.jpg)](docs/screenshots/inventory.jpg) |
+| Birden fazla hedefi aynı çalışma altında takip edin. | Varlıkları tür, kapsam ve kanıt düzeyine göre filtreleyin. |
+
+| Kimlik profilleri / Vault | Denetim kaydı |
+| --- | --- |
+| [![Şifreli saklanan ve hedeflere atanan kimlik profilleri](docs/screenshots/auth-profiles.jpg)](docs/screenshots/auth-profiles.jpg) | [![Kullanıcı, işlem, nesne ve IP bilgilerini gösteren denetim kaydı](docs/screenshots/audit-log.jpg)](docs/screenshots/audit-log.jpg) |
+| Kimlik profillerini hedeflere atayın; sırlar listede gösterilmez. | İşlemleri kullanıcı ve eyleme göre inceleyin. |
+
+<details>
+<summary>Yönetim raporu: bulgu eğilimi, açık kalma ve düzeltme süreleri</summary>
+
+Hedef veya kampanya için özet oluşturun; **Download PDF** ile tarayıcının yazdırma penceresinden kaydedin.
+
+![Skynet yönetim raporu: açık bulgular, önem dereceleri, tarama eğilimi ve düzeltme süreleri](docs/screenshots/management-report.jpg)
+
+</details>
+
+Görüntülerin kaynak sürümü ve kontrol bilgileri: [ekran görüntüsü notları](docs/screenshots/README.md).
+
+## Özellikler
 
 - Hedef yönetimi: uygulama, adres, ortam (development / test / staging / production), kapsam içi/dışı
 - **Kampanyalar:** birden çok hedefi, taramayı ve zamanlamayı tek angajman altında toplama; bulgu aday grupları özeti
@@ -50,6 +84,13 @@ var olan kurulumların ayarı değişmez. Yeniden kurmak için: `scripts/setup_s
 düzenlenemez/silinemez. `.env` içinde `SKYNET_PASSWORD` boşsa ilk açılışta rastgele bir şifre üretilir ve
 `data/admin_password.txt` dosyasına (0600) yazılır; şifre Settings > Your account bölümünden değiştirilebilir.
 `SKYNET_PASSWORD` doluysa şifre ortamdan gelir ve arayüzden değiştirilemez.
+
+### İlk kullanım
+
+1. **Settings > LLM connections** bölümünde OpenRouter veya LiteLLM bağlantısını ekleyip varsayılan seçin.
+2. **Targets > New target** ile yetkili olduğunuz hedefi, ortamını ve kapsam sınırlarını tanımlayın.
+3. Kimlik doğrulama gerekiyorsa **Auth profiles** bölümünden profil oluşturup hedefe atayın.
+4. Hedefte **Scan now** ile tarama başlatın veya **Add schedule** ile zamanlayın; sonuçları hedef ve tarama detayından izleyin.
 
 ## Kullanıcılar, roller ve denetim kaydı
 
@@ -264,7 +305,24 @@ skynet/
 tests/             Birim ve API testleri; tests/runtime/ Strix runtime'ında çalışan gerçek koordinatör kontrolleri
 ```
 
-Testler: `python -m unittest discover -s tests` (geçici bir veri klasörü kullanır; gerçek `data/` klasörüne dokunmaz).
+## Test ve doğrulama
+
+Kurulumdan sonra uygulama ortamında testleri çalıştırın:
+
+```sh
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+Testler geçici veri dizinleri kullanır; gerçek `data/` klasörüne dokunmaz. Native Strix testlerinin de çalışması
+için `.strix-runtime` kurulu olmalıdır; yoksa bu testler açıkça atlanır.
+
+**Son backend doğrulaması:** Red Hat UBI 9 x86_64 / Python 3.12.15 üzerinde **193 test geçti**, native Strix
+testleri atlanmadı. Gerçek Nginx HTTP/HTTPS, giriş/CSRF, IP kısıtları ve uygulama yeniden başlatma sonrası
+şifreli veri kalıcılığı da doğrulandı. [Test kanıtları ve tekrar komutları](docs/qa/2026-11-16-rhel-codex/README.md).
+UBI testi gerçek RHEL sunucusunda systemd, SELinux, firewalld ve Docker sandbox kabulünün yerini tutmaz.
+
+Geliştirme ve doğrulama takibi: [PROGRESS.md](PROGRESS.md). Özelliklerin kabul ölçütleri:
+[FEATURE_BACKLOG.md](docs/FEATURE_BACKLOG.md).
 
 Yalnızca yetkili olduğunuz sistemleri tarayın.
 

@@ -1,0 +1,70 @@
+{
+  "sourceCommit": "af7b87b511f9663aa87778de1aee2c313a04ff68",
+  "capturedAt": "2026-11-16T21:00:23.172Z",
+  "browser": "Headless Chrome via Playwright",
+  "viewport": {
+    "width": 1600,
+    "height": 1050
+  },
+  "additionalViewportCheck": {
+    "width": 1366,
+    "height": 768
+  },
+  "data": "Isolated synthetic documentation fixtures. No real customer data, live scan, external target request or provider call.",
+  "checks": [
+    {
+      "file": "target-details.jpg",
+      "route": "/targets/1",
+      "heading": "Demo Storefront",
+      "horizontalOverflow": false,
+      "width": 1600,
+      "height": 1050,
+      "consoleErrors": []
+    },
+    {
+      "file": "campaign.jpg",
+      "route": "/campaigns/1",
+      "heading": "Demo · Release readiness",
+      "horizontalOverflow": false,
+      "width": 1600,
+      "height": 1050,
+      "consoleErrors": []
+    },
+    {
+      "file": "inventory.jpg",
+      "route": "/inventory?target=1",
+      "heading": "Inventory",
+      "horizontalOverflow": false,
+      "width": 1600,
+      "height": 1050,
+      "consoleErrors": []
+    },
+    {
+      "file": "auth-profiles.jpg",
+      "route": "/auth-profiles",
+      "heading": "Auth profiles",
+      "horizontalOverflow": false,
+      "width": 1600,
+      "height": 1050,
+      "consoleErrors": []
+    },
+    {
+      "file": "management-report.jpg",
+      "route": "/targets/1/report",
+      "heading": "Demo Storefront",
+      "horizontalOverflow": false,
+      "width": 1600,
+      "height": 1209,
+      "consoleErrors": []
+    },
+    {
+      "file": "audit-log.jpg",
+      "route": "/audit",
+      "heading": "Audit log",
+      "horizontalOverflow": false,
+      "width": 1600,
+      "height": 1050,
+      "consoleErrors": []
+    }
+  ]
+}
