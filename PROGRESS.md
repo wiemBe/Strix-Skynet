@@ -1,6 +1,22 @@
 # Skynet — çalışma takibi
 
-Güncelleme: 17 Kasım 2026 · Europe/Istanbul (son çalışma: README ekran görüntüleri ve kullanım rehberi)
+Güncelleme: 17 Kasım 2026 · Europe/Istanbul (son çalışma: bulgu kartı yeniden tasarımı, SIEM/Syslog main'e alındı)
+
+## Bulgu kartı ve SIEM/Syslog entegrasyonu — Claude, 17 Kasım 2026
+
+- [x] `origin/main` çekildi (PR #8 RHEL düzeltmeleri, PR #9 README görüntüleri); yereldeki SIEM/Syslog çalışması
+  korunarak üstüne alındı. PROGRESS çakışması iki tarafın bölümleri tutularak çözüldü.
+- [x] SIEM/Syslog çalışması (aşağıdaki iki Codex bölümü) ayrı commit olarak main'e alındı.
+- [x] Hedef/kampanya “Finding groups” kartı yeniden tasarlandı: açık sayı başlığı, durum etiketleri, önem başına
+  dağılım çubuğu (parlak = açık, soluk = çözülmüş), hizalı sütunlar, açığı olmayan satırda “Resolved”.
+  “1 groups / 1 scans” tekil-çoğul hataları düzeltildi.
+- [x] “Open critical / high” istatistik kutusu, `alert` bileşen sınıfıyla çakıştığı için yatay diziliyordu;
+  sınıf `is-alert` olarak ayrıldı (genel bakış ve kampanya).
+- [x] Ayrı veri klasörü/anahtar/portta (8790) sentetik demo ile karışık, false positive ve tamamı çözülmüş
+  durumlar; 1600 × 1050 ve 768 genişlikte taşma/konsol hatası yok. Asıl veritabanı değiştirilmedi.
+- [x] `target-details.jpg` ve `campaign.jpg` yeniden alındı ([notlar](docs/screenshots/README.md)).
+- [x] macOS'ta **214/214 test OK**.
+- Telefon genişliğinde (375 px) tüm uygulama sabit kenar çubuğu nedeniyle sıkışıyor; bu karttan bağımsız, ayrı iş.
 
 ## README ekran görüntüleri — Codex, 17 Kasım 2026
 
@@ -27,6 +43,41 @@ Güncelleme: 17 Kasım 2026 · Europe/Istanbul (son çalışma: README ekran gö
 - [x] Önce/sonra kanıtları ve tekrar komutları: [QA raporu](docs/qa/2026-11-16-rhel-codex/README.md).
 - Gerçek RHEL host boot/systemd, SELinux enforcing, firewalld ve Docker sandbox pentesti yapılmadı.
   Host verileri/anahtarları paylaşılmadı; LLM veya dış hedef taraması başlatılmadı.
+
+## Syslog tekrar QA — Codex, 16 Kasım 2026
+
+[Tekrar üretimler, testler ve ekranlar](docs/qa/2026-11-16-syslog-repeat/README.md).
+
+- [x] Dört kusur kapatıldı: yeni başarılı olayın gizlediği pending hata, JSON'a benzeyen audit özetinin
+  türünün değişmesi/audit API sorunu, yavaş gönderimin retry aralığını tüketmesi ve form hatasında takılı kalan test durumu.
+- [x] Probe sonucu test edilen endpoint'i gösteriyor; form değişince eski sonuç temizleniyor.
+- [x] Altı yeni regresyonla **212/212 test OK**; UBI 9 x86_64'te **21/21 syslog testi OK**.
+  Tam test çıktısındaki SQLite ResourceWarning'ler raporda ayrıca kayıtlı.
+- [x] Ayrı süreç kapanıp açıldıktan sonra pending olay gerçek localhost TCP alıcısına aynı event_id ile ulaştı.
+- [x] 1366×768 / 1920×1080: validation/probe/TLS hata/Viewer ekranları incelendi; yatay taşma ve konsol hatası yok.
+- [x] Gerçek yerel servis, aktif tarama ve etkin zamanlama olmadığı doğrulanarak güncel kodla yeniden açıldı.
+  Schema 8, mevcut anahtar/oturum korundu; syslog kapalı/collector boş. Yeni pentest veya migration yok.
+- [ ] Kurum SIEM'i ingestion ve gerçek RHEL host kabulü hâlâ ayrı; collector/host bilgisi verilmedi.
+
+Geçici QA sunucusu/verileri temizlendi; gerçek uygulama sağdaki tarayıcıda açık. Bu değişiklikler commit/push edilmedi.
+
+## SIEM / Syslog — Codex, 16 Kasım 2026
+
+[Kurulum ve teslim anlamı](docs/SYSLOG.md), [test/görsel QA kanıtları](docs/qa/2026-11-16-syslog/README.md).
+
+- [x] Admin Settings → SIEM / Syslog: RFC 5424 + JSON, UDP/TCP/TLS, optional mTLS, facility/source/CA/hostname alanları.
+- [x] Merkezi audit kaynağı; aynı SQLite transaction'ında outbox. Request handler network gönderimi yapmıyor.
+- [x] Kalıcı retry, sabit event_id, 10.000 pending sınırı/overflow görünürlüğü; yeni hedefe eski kuyruk taşınmıyor.
+- [x] Göndermeden önce güncel/tarihsel maskeleme; okunamayan bağlamda gönderim yok. TLS doğrulaması zorunlu.
+- [x] Test probe, pending/handoff/hata sayaçları; handoff SIEM ingestion onayı olarak sunulmuyor.
+- [x] İlk uygulama aşamasında 15 yeni testle macOS'ta **206/206 OK**; UBI 9 x86_64'te syslog **15/15 OK**.
+- [x] 1366×768 / 1920×1080 form, TLS, UDP probe/handoff, TCP retry ve Viewer görsel QA. Taşma/konsol hatası yok.
+- [x] Çalışan yerel uygulama, boş kuyruk/zamanlama kontrolünden sonra migration 8 ile güncellendi; önce tutarlı
+  yedek alındığı doğrulandı. Mevcut anahtar ve kullanıcı oturumu korundu; yeni pentest başlatılmadı.
+- [ ] Gerçek kurum SIEM'i parser/indexer alımı ve RHEL host egress/SELinux kabulü; collector bilgisi verilmedi.
+
+Yerel gerçek uygulamada forwarding **kapalı**, collector boş. QA yalnız kendi sentetik verisi ve localhost
+UDP/TCP/TLS alıcılarını kullandı. Yeni kod bu turda commit/push edilmedi; önceki main entegrasyonu aşağıda kayıtlı.
 
 ## Main entegrasyonu — Codex, 16 Kasım 2026
 

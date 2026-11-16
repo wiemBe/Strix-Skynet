@@ -424,7 +424,7 @@ async function viewOverview() {
       h("div", { class: "stats" },
         h("div", { class: "stat" }, h("div", { class: "k" }, "Active scans"), h("div", { class: "v" }, running.length), h("div", { class: "s" }, `Concurrency limit ${o.max_concurrent}`)),
         h("div", { class: "stat" }, h("div", { class: "k" }, "Queued"), h("div", { class: "v" }, queued.length), h("div", { class: "s" }, queued.length ? "Waiting in line" : "Queue empty")),
-        h("div", { class: "stat" + (crit ? " alert" : "") }, h("div", { class: "k" }, "Open critical / high findings"),
+        h("div", { class: "stat" + (crit ? " is-alert" : "") }, h("div", { class: "k" }, "Open critical / high findings"),
           h("div", { class: "v" }, withScan.length ? `${crit} / ${high}` : "—"),
           h("div", { class: "s", title: "Based on each target's last completed scan" }, withScan.length ? "Based on targets' latest scans" : "No completed scans yet")),
         h("div", { class: "stat" }, h("div", { class: "k" }, "Next scan"),
@@ -572,7 +572,7 @@ async function viewTarget(id) {
     t.active_scan ? alertBox("info", "This target has an active scan", ["Scan ", h("a", { href: `#/scans/${t.active_scan.id}` }, `#${t.active_scan.id}`), ` is ${STATUS_TR[t.active_scan.status].toLowerCase()}. Back-to-back scans on the same target aren't allowed.`]) : null,
     h("div", { class: "grid-main-side" },
       h("div", {},
-        findings.summary && findings.summary.unique ? section("Finding groups", findingsCard(findings.summary, id), { hint: `${findings.summary.unique} groups` }) : null,
+        findings.summary && findings.summary.unique ? section("Finding groups", findingsCard(findings.summary, id), { hint: plural(findings.summary.unique, "group") }) : null,
         section("Scan history", h("div", { class: "table-card" }, scanTable(scans, { showTarget: false, empty: emptyState("This target hasn't been scanned yet", "Start the first scan to see its security posture.", [button("Scan now", { kind: "primary", ic: "play", onclick: () => scanDialog(t) })]) })), { hint: scans.length ? `${scans.length} records` : null }),
         section("Schedules", h("div", { class: "table-card" }, scheduleTable(schedules, { showTarget: false, empty: emptyState("No schedules", "Plan recurring scans for this target.", [button("Add schedule", { onclick: () => go(`#/schedules/new?target=${id}`) })]) })))),
       h("div", {},
@@ -1547,13 +1547,13 @@ async function viewCampaign(id) {
     c.scope ? alertBox("info", "Engagement scope", c.scope) : null,
     h("div", { class: "stats" },
       h("div", { class: "stat" }, h("div", { class: "k" }, "Targets"), h("div", { class: "v" }, c.target_ids.length)),
-      h("div", { class: "stat" + (fs.open_counts && (fs.open_counts.critical || fs.open_counts.high) ? " alert" : "") }, h("div", { class: "k" }, "Open critical / high"),
+      h("div", { class: "stat" + (fs.open_counts && (fs.open_counts.critical || fs.open_counts.high) ? " is-alert" : "") }, h("div", { class: "k" }, "Open critical / high"),
         h("div", { class: "v" }, fs.open_counts ? `${fs.open_counts.critical || 0} / ${fs.open_counts.high || 0}` : "—")),
       h("div", { class: "stat" }, h("div", { class: "k" }, "Finding groups"), h("div", { class: "v" }, fs.unique ?? "—"), fs.seen_after_fix ? h("div", { class: "s alert-text" }, `${fs.seen_after_fix} seen after remediation`) : null),
       h("div", { class: "stat" }, h("div", { class: "k" }, "Scans"), h("div", { class: "v" }, c.scan_count), h("div", { class: "s" }, c.active_scans ? `${c.active_scans} active` : "all done"))),
     h("div", { class: "grid-main-side" },
       h("div", {},
-        section("Findings", findingsCard(fs, scans.map((s) => s.id), id), { hint: fs.unique ? `${fs.unique} groups, ${fs.occurrences} occurrences` : null }),
+        section("Findings", findingsCard(fs, scans.map((s) => s.id), id), { hint: fs.unique ? `${plural(fs.unique, "group")}, ${plural(fs.occurrences, "occurrence")}` : null }),
         section("Scans", h("div", { class: "table-card" }, scanTable(scans, { empty: emptyState("No scans in this campaign", "Start a scan linked to the campaign.") }))),
         c.schedules && c.schedules.length ? section("Schedules", h("div", { class: "table-card" }, scheduleTable(c.schedules))) : null),
       h("div", {},
@@ -1565,12 +1565,35 @@ async function viewCampaign(id) {
 function findingsCard(fs, scanIds, campaignId) {
   if (!fs || !fs.unique) return h("div", { class: "card" }, emptyState("No findings", "No finding groups in this scope. They are collected as scans complete."));
   const openSev = fs.open_counts || {};
-  return h("div", { class: "card card-pad" },
-    h("div", { class: "sev-bars" }, SEV.map((s) => fs.counts[s] ? h("div", { class: "sev-bar" },
-      h("span", { class: `sevpill ${s}` }, SEV_TR[s]), h("span", {}, `${fs.counts[s]} groups`), openSev[s] ? h("span", { class: "faint" }, `${openSev[s]} open`) : null) : null)),
-    h("div", { class: "rem-row" }, Object.entries(fs.remediation || {}).map(([k, n]) => n ? h("span", { class: "tag" }, `${REMEDIATION_TR[k]}: ${n}`) : null)),
-    h("div", { class: "actions mt" }, button("Review findings", { onclick: () => findingsDialog(scanIds, campaignId) })));
+  const rem = fs.remediation || {};
+  const open = rem.open || 0;
+  const closed = Object.entries(rem).filter(([k, n]) => k !== "open" && n);
+  const max = Math.max(...SEV.map((s) => fs.counts[s] || 0));
+  // Widths go through CSSOM: the CSP (style-src 'self') blocks inline style attributes.
+  const sized = (el, prop, value) => { el.style[prop] = value; return el; };
+  const rows = SEV.map((s) => {
+    const total = fs.counts[s] || 0;
+    if (!total) return null;
+    const o = openSev[s] || 0;
+    const bar = sized(h("div", { class: `fc-bar ${s}` },
+      o ? sized(h("span", { class: "fc-open" }), "flex", String(o)) : null,
+      total - o ? sized(h("span", { class: "fc-closed" }), "flex", String(total - o)) : null), "width", `${(total / max) * 100}%`);
+    return h("div", { class: "fc-row" },
+      h("span", { class: "fc-sev" }, h("span", { class: `sq ${s}` }), SEV_TR[s]),
+      h("div", { class: "fc-track", title: `${o} of ${plural(total, "group")} open` }, bar),
+      h("span", { class: "fc-groups" }, plural(total, "group")),
+      o ? h("span", { class: "fc-state" }, `${o} open`) : h("span", { class: "fc-state done" }, icon("check"), "Resolved"));
+  });
+  return h("div", { class: "card fcard" },
+    h("div", { class: "fc-head" },
+      h("div", { class: "fc-total" },
+        h("span", { class: `fc-num${open ? "" : " done"}` }, String(open)),
+        h("span", { class: "fc-lbl" }, open ? `open of ${plural(fs.unique, "group")}` : "open · all resolved")),
+      closed.length ? h("div", { class: "fc-rem" }, closed.map(([k, n]) => h("span", { class: `rem ${k}` }, `${REMEDIATION_TR[k]} ${n}`))) : null),
+    h("div", { class: "fc-rows" }, rows),
+    h("div", { class: "fc-foot" }, button("Review findings", { size: "sm", onclick: () => findingsDialog(scanIds, campaignId) })));
 }
+function plural(n, one, many = `${one}s`) { return `${n} ${n === 1 ? one : many}`; }
 
 async function viewCampaignForm(id) {
   const [c, targets] = await Promise.all([id ? api(`/api/campaigns/${id}`) : null, api("/api/targets")]);
@@ -1667,7 +1690,7 @@ async function findingsDialog(scanIds, campaignId) {
         h("td", { class: "shrink" }, h("span", { class: `sevpill ${g.severity}` }, SEV_TR[g.severity] || g.severity)),
         h("td", {}, h("div", { class: "cell-clip" }, h("div", { class: "primary-line", title: g.title }, g.title), h("div", { class: "secondary-line mono" }, [g.method, g.endpoint].filter(Boolean).join(" ") || g.host || ""))),
         h("td", { class: "nowrap" }, h("span", { class: `rem ${g.remediation}` }, REMEDIATION_TR[g.remediation]), g.seen_after_fix ? h("span", { class: "tag danger", title: "Seen again after being marked fixed" }, "again") : null),
-        h("td", { class: "nowrap muted" }, `${g.runs} scans`),
+        h("td", { class: "nowrap muted" }, plural(g.runs, "scan")),
         h("td", { class: "shrink" }, icon("chevron")), detail));
       tbody.append(detail);
     });

@@ -19,7 +19,9 @@
       "horizontalOverflow": false,
       "width": 1600,
       "height": 1050,
-      "consoleErrors": []
+      "consoleErrors": [],
+      "recapturedAt": "2026-11-16T21:24:31.687Z",
+      "recaptureNote": "Re-captured after the finding groups card redesign and stat card layout fix; same synthetic fixture rebuilt on macOS, headless Chromium via Playwright."
     },
     {
       "file": "campaign.jpg",
@@ -28,7 +30,9 @@
       "horizontalOverflow": false,
       "width": 1600,
       "height": 1050,
-      "consoleErrors": []
+      "consoleErrors": [],
+      "recapturedAt": "2026-11-16T21:24:31.687Z",
+      "recaptureNote": "Re-captured after the finding groups card redesign and stat card layout fix; same synthetic fixture rebuilt on macOS, headless Chromium via Playwright."
     },
     {
       "file": "inventory.jpg",
