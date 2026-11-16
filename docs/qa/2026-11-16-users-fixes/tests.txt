@@ -1,0 +1,18 @@
+........<frozen importlib._bootstrap_external>:500: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1074603c0>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+<frozen importlib._bootstrap_external>:500: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107463d80>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+<frozen importlib._bootstrap_external>:500: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1074dc740>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+<frozen importlib._bootstrap_external>:500: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1074dc820>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+<frozen importlib._bootstrap_external>:500: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1074dc660>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+<frozen importlib._bootstrap_external>:500: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x1074dc9e0>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+..............................................................................2026-11-16 16:49:44,804 WARNING skynet.control: ignoring control file with unsafe permissions: scan_11_control.json
+.................................................................................................
+----------------------------------------------------------------------
+Ran 183 tests in 12.620s
+
+OK

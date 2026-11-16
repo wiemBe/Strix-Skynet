@@ -53,6 +53,10 @@ düzenlenemez/silinemez. `.env` içinde `SKYNET_PASSWORD` boşsa ilk açılışt
 
 ## Kullanıcılar, roller ve denetim kaydı
 
+Ağdan sunucu IP'siyle erişim: [aynı RHEL sunucusunda Nginx kurulumu](docs/NGINX.md).
+Nginx 80/443'te, Skynet `127.0.0.1:8787`'de çalışır. HTTP/HTTPS, istemci CIDR allowlist'i ve dry-run kurucu vardır;
+gerçek sunucuya uygulanmış kabul edilmez.
+
 Admin, Settings > Users bölümünden ek hesap açar. Üç rol vardır:
 
 | Rol | Yetki |
@@ -64,13 +68,19 @@ Admin, Settings > Users bölümünden ek hesap açar. Üç rol vardır:
 - Yetki sunucuda tek bir tablodan uygulanır (`skynet/audit.py` `RULES`). Listede olmayan değiştirici bir uç nokta
   varsayılan olarak yalnız admin'e açıktır; arayüzde yetkisiz düğmeler gizlenir ama asıl kontrol sunucudadır.
 - Rol ve hesap durumu her istekte veritabanından okunur: rol değişikliği mevcut oturuma hemen uygulanır; devre dışı
-  bırakma, şifre sıfırlama veya şifre değişikliği kullanıcının açık oturumlarını sonlandırır.
+  bırakma, şifre sıfırlama veya şifre değişikliği kullanıcının açık oturumlarını sonlandırır. Devre dışı bırakılıp
+  yeniden açılan hesapta eski çerezler tekrar geçerli olmaz; kullanıcı yeniden giriş yapar.
 - Son etkin admin kaldırılamaz; kimse kendi rolünü düşüremez, kendini devre dışı bırakamaz veya silemez.
 - **Audit log** (yalnız admin): giriş/çıkış ve başarısız girişler (yalnız var olan kullanıcı adları kaydedilir), her
   değiştirici API çağrısı (kim, ne, hangi nesne, sonuç, IP), reddedilen denemeler (403), zamanlayıcı ve CI token ile
   başlatılan taramalar, rapor görüntülemeleri. İstek gövdesi asla saklanmaz (sırlar, şifreler, talimat metni);
   yalnız sır içermeyen kısa özetler (ör. bulgu durumu `open → fixed`). Kayıt eklemeli tutulur; arayüzde silme yoktur.
 - Mevcut kurulumlar migration 6 ile taşınır: üretilmiş admin şifresi kullanıcı tablosuna aktarılır (öncesinde yedek alınır).
+- Migration 7, kalıcı oturum iptal sürümünü ve güvenilir `fixed_at` zamanını ekler; zaten kapalı hesapların eski
+  oturumlarını da iptal eder. Eski audit metadata'sındaki bilinen tam sır değerleri aynı migration transaction'ında
+  maskelenir; olay kimliği, zamanı ve sonucu korunur. Bu, eklemeli kayıt politikasının gizlilik onarımı istisnasıdır.
+  Önce tutarlı SQLite yedeği alınır; mevcut anahtar değiştirilmez. Önceki yedekler yeniden yazılmaz ve düzeltme öncesi
+  metadata içerebilir. Sonradan öğrenilen sırlar audit okunurken de maskelenir.
 
 ## Yönetim raporu
 
@@ -78,6 +88,12 @@ Hedef veya kampanya sayfasındaki **Report** düğmesi bir özet açar (her rol 
 derecesine göre), tarama başına bulgu eğilimi, açık bulguların yaşı ve düzeltme süresi, test kapsamı, en önemli 6 açık
 bulgu. Hedef raporu tek A4 sayfaya sığacak şekilde düzenlenmiştir; kampanya raporu hedef sayısı arttıkça 2. sayfaya taşar. **Download PDF** tarayıcının yazdırma penceresini açar; "PDF olarak kaydet" seçilir (A4, açık tema;
 ek Python bağımlılığı yoktur, Türkçe karakterler korunur).
+
+Raporun başlık, hedef/kampanya metadata'sı ve hazırlayan adı dahil tüm metinleri güncel Vault değerleri ve
+saklanan tarama maskeleme verileriyle korunur. Düzeltme süresi yalnız kaydedilmiş **Fixed durumuna geçiş**
+zamanından hesaplanır; not düzenlemek bu zamanı değiştirmez. Eski `remediation_at` alanının gerçek geçiş mi
+yoksa son not düzenlemesi mi olduğu belirlenemediğinden bu alan `fixed_at` için doldurulmaz. Güvenilir zamanı
+olmayan fixed kayıtlar sayılmaya devam eder, fakat süre istatistiğinden çıkarılır; raporda eksik sayı açıklanır.
 
 - Skynet'te düzeltme son tarihi (SLA) olmadığı için "son tarihe uyum" gösterilmez; yerine açık kalma süresi ve
   "ilk görülme → fixed işaretlenme" süresi gösterilir.

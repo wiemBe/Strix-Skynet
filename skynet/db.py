@@ -421,6 +421,13 @@ CREATE INDEX idx_audit_actor ON audit_log(actor, id DESC);
 """
 
 
+MIGRATION_7 = """
+ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0;
+UPDATE users SET session_version=1 WHERE active=0;
+ALTER TABLE finding_groups ADD COLUMN fixed_at TEXT;
+"""
+
+
 MIGRATIONS: list[tuple[int, str, str]] = [
     (1, "campaigns, auth profiles, finding correlation, inventory, telemetry", MIGRATION_1),
     (2, "per-finding verification (finding_verifications)", MIGRATION_2),
@@ -428,6 +435,7 @@ MIGRATIONS: list[tuple[int, str, str]] = [
     (4, "operator messages to running agents (agent_messages, scans.control_mode)", MIGRATION_4),
     (5, "analyst notes, evidence labels, correlation reviews, per-scan credential bindings", MIGRATION_5),
     (6, "user accounts with roles, audit log", MIGRATION_6),
+    (7, "revoke disabled sessions, stable fixed transition time, sanitize audit metadata", MIGRATION_7),
 ]
 
 
@@ -531,7 +539,14 @@ def _migrate_admin_account(c: sqlite3.Connection) -> None:
     c.execute("DELETE FROM settings WHERE key='admin_password_hash'")
 
 
-DATA_MIGRATIONS = {1: _migrate_inline_target_auth, 6: _migrate_admin_account}
+def _repair_audit_metadata(c: sqlite3.Connection) -> None:
+    from . import audit
+    audit.sanitize_existing(c)
+    # remediation_at was overwritten by note edits; no trustworthy historical
+    # fixed transition can be inferred. Existing fixed_at deliberately stays NULL.
+
+
+DATA_MIGRATIONS = {1: _migrate_inline_target_auth, 6: _migrate_admin_account, 7: _repair_audit_metadata}
 
 
 def q(sql: str, args: Iterable[Any] = ()) -> list[dict[str, Any]]:

@@ -175,6 +175,8 @@ def update_user(uid: int, acting: dict[str, Any], role: str | None = None, activ
         changes["role"] = role
     if active is not None and bool(active) != bool(u["active"]):
         changes["active"] = 1 if active else 0
+        if not active:
+            changes["session_version"] = int(u.get("session_version") or 0) + 1
     if display_name is not None:
         changes["display_name"] = display_name.strip()[:80]
     demotes = changes.get("role", "admin") != "admin" or changes.get("active", 1) == 0
@@ -245,8 +247,10 @@ def _sign(payload: bytes) -> str:
 
 
 def _fingerprint(u: dict[str, Any]) -> str:
-    """Changes when the user's password changes, so a password change/reset signs out old sessions."""
+    """Password changes and account suspension permanently revoke existing sessions."""
     src = f"{u['id']}:{u['username']}:" + (ADMIN_PASSWORD if env_managed(u) else (u.get("password_hash") or ""))
+    if u.get("session_version"):
+        src += f":{u['session_version']}"
     return hashlib.sha256(src.encode()).hexdigest()[:16]
 
 

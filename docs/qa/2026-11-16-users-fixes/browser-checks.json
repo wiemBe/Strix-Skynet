@@ -1,0 +1,337 @@
+{
+  "date": "2026-11-16",
+  "checks": [
+    {
+      "view": "admin-users",
+      "height": 768,
+      "newNoteVisible": false,
+      "scrollWidth": 1366,
+      "visibleMutations": [],
+      "width": 1366
+    },
+    {
+      "view": "admin-users",
+      "height": 1080,
+      "newNoteVisible": false,
+      "scrollWidth": 1920,
+      "visibleMutations": [],
+      "width": 1920
+    },
+    {
+      "view": "admin-audit",
+      "height": 768,
+      "newNoteVisible": false,
+      "scrollWidth": 1366,
+      "visibleMutations": [],
+      "width": 1366
+    },
+    {
+      "view": "admin-audit",
+      "height": 1080,
+      "newNoteVisible": false,
+      "scrollWidth": 1920,
+      "visibleMutations": [],
+      "width": 1920
+    },
+    {
+      "view": "target-report",
+      "height": 768,
+      "newNoteVisible": false,
+      "scrollWidth": 1366,
+      "visibleMutations": [],
+      "width": 1366
+    },
+    {
+      "view": "target-report",
+      "height": 1080,
+      "newNoteVisible": false,
+      "scrollWidth": 1920,
+      "visibleMutations": [],
+      "width": 1920
+    },
+    {
+      "view": "campaign-report",
+      "height": 768,
+      "newNoteVisible": false,
+      "scrollWidth": 1366,
+      "visibleMutations": [],
+      "width": 1366
+    },
+    {
+      "view": "campaign-report",
+      "height": 1080,
+      "newNoteVisible": false,
+      "scrollWidth": 1920,
+      "visibleMutations": [],
+      "width": 1920
+    },
+    {
+      "view": "analyst-workspace",
+      "height": 768,
+      "newNoteVisible": true,
+      "scrollWidth": 1366,
+      "visibleMutations": [
+        "Assign role",
+        "Assign role",
+        "Add note",
+        "Confirm match",
+        "Reject match",
+        "Clear"
+      ],
+      "width": 1366
+    },
+    {
+      "view": "analyst-workspace",
+      "height": 1080,
+      "newNoteVisible": true,
+      "scrollWidth": 1920,
+      "visibleMutations": [
+        "Assign role",
+        "Assign role",
+        "Add note",
+        "Confirm match",
+        "Reject match",
+        "Clear"
+      ],
+      "width": 1920
+    },
+    {
+      "view": "analyst-note-revision",
+      "height": 768,
+      "newNoteVisible": true,
+      "scrollWidth": 1366,
+      "visibleMutations": [
+        "Assign role",
+        "Assign role",
+        "Add note",
+        "Confirm match",
+        "Reject match",
+        "Clear"
+      ],
+      "width": 1366
+    },
+    {
+      "view": "analyst-note-revision",
+      "height": 1080,
+      "newNoteVisible": true,
+      "scrollWidth": 1920,
+      "visibleMutations": [
+        "Assign role",
+        "Assign role",
+        "Add note",
+        "Confirm match",
+        "Reject match",
+        "Clear"
+      ],
+      "width": 1920
+    },
+    {
+      "view": "analyst-diff",
+      "height": 768,
+      "newNoteVisible": true,
+      "scrollWidth": 1366,
+      "visibleMutations": [
+        "Assign role",
+        "Assign role",
+        "Add note",
+        "Confirm match",
+        "Reject match",
+        "Clear"
+      ],
+      "width": 1366
+    },
+    {
+      "view": "analyst-diff",
+      "height": 1080,
+      "newNoteVisible": true,
+      "scrollWidth": 1920,
+      "visibleMutations": [
+        "Assign role",
+        "Assign role",
+        "Add note",
+        "Confirm match",
+        "Reject match",
+        "Clear"
+      ],
+      "width": 1920
+    },
+    {
+      "view": "viewer-workspace",
+      "height": 768,
+      "newNoteVisible": false,
+      "scrollWidth": 1366,
+      "visibleMutations": [],
+      "width": 1366
+    },
+    {
+      "view": "viewer-workspace",
+      "height": 1080,
+      "newNoteVisible": false,
+      "scrollWidth": 1920,
+      "visibleMutations": [],
+      "width": 1920
+    },
+    {
+      "view": "viewer-notes",
+      "height": 768,
+      "newNoteVisible": false,
+      "scrollWidth": 1366,
+      "visibleMutations": [],
+      "width": 1366
+    },
+    {
+      "view": "viewer-notes",
+      "height": 1080,
+      "newNoteVisible": false,
+      "scrollWidth": 1920,
+      "visibleMutations": [],
+      "width": 1920
+    },
+    {
+      "view": "viewer-empty-report",
+      "height": 768,
+      "newNoteVisible": false,
+      "scrollWidth": 1366,
+      "visibleMutations": [],
+      "width": 1366
+    },
+    {
+      "view": "viewer-empty-report",
+      "height": 1080,
+      "newNoteVisible": false,
+      "scrollWidth": 1920,
+      "visibleMutations": [],
+      "width": 1920
+    },
+    {
+      "view": "viewer-workspace-final",
+      "height": 1080,
+      "newNoteVisible": false,
+      "panelTops": [
+        297.09375,
+        297.09375
+      ],
+      "scrollWidth": 1920,
+      "selectedRequests": [
+        "qa-synthetic-records-no-engine-run:804",
+        "qa-synthetic-records-no-engine-run:802"
+      ],
+      "visibleMutations": [],
+      "width": 1920
+    },
+    {
+      "view": "viewer-settings",
+      "height": 768,
+      "newNoteVisible": false,
+      "scrollWidth": 1366,
+      "visibleMutations": [],
+      "width": 1366
+    },
+    {
+      "view": "viewer-settings",
+      "height": 1080,
+      "newNoteVisible": false,
+      "scrollWidth": 1920,
+      "visibleMutations": [],
+      "width": 1920
+    },
+    {
+      "view": "add-user-dialog",
+      "height": 768,
+      "newNoteVisible": false,
+      "scrollWidth": 1366,
+      "visibleMutations": [],
+      "width": 1366
+    },
+    {
+      "view": "add-user-dialog",
+      "height": 1080,
+      "newNoteVisible": false,
+      "scrollWidth": 1920,
+      "visibleMutations": [],
+      "width": 1920
+    },
+    {
+      "view": "add-user-dialog-bounds",
+      "dialog": {
+        "bottom": 645.390625,
+        "height": 559,
+        "left": 650,
+        "right": 1270,
+        "top": 86.390625,
+        "width": 620,
+        "x": 650,
+        "y": 86.390625
+      },
+      "height": 1080,
+      "width": 1920
+    },
+    {
+      "view": "change-role-dialog",
+      "height": 768,
+      "newNoteVisible": false,
+      "scrollWidth": 1366,
+      "visibleMutations": [],
+      "width": 1366
+    },
+    {
+      "view": "change-role-dialog",
+      "height": 1080,
+      "newNoteVisible": false,
+      "scrollWidth": 1920,
+      "visibleMutations": [],
+      "width": 1920
+    },
+    {
+      "view": "audit-search",
+      "height": 768,
+      "newNoteVisible": false,
+      "scrollWidth": 1366,
+      "visibleMutations": [],
+      "width": 1366
+    },
+    {
+      "view": "audit-search",
+      "height": 1080,
+      "newNoteVisible": false,
+      "scrollWidth": 1920,
+      "visibleMutations": [],
+      "width": 1920
+    },
+    {
+      "view": "audit-search-result",
+      "rows": [
+        "TimeUserActionObjectIP",
+        "Today 04:42 PMqa-analystAnalystEdited analyst notefinding.note_editfinding #1Note #1127.0.0.1"
+      ]
+    },
+    {
+      "view": "aligned-panels-final",
+      "height": 768,
+      "panelTops": [
+        421.09375,
+        421.09375
+      ],
+      "scrollWidth": 1366,
+      "selectedRequests": [
+        "qa-synthetic-records-no-engine-run:804",
+        "qa-synthetic-records-no-engine-run:802"
+      ],
+      "width": 1366
+    }
+  ],
+  "console": [],
+  "environment": "Temporary synthetic local QA fixture; no normal lifespan, Strix, worker, scheduler or provider request",
+  "pdfGenerated": false,
+  "interactions": [
+    "Admin/Analyst/Viewer login",
+    "Analyst note add and revision",
+    "Analyst correlation confirmation",
+    "Analyst evidence role assignment",
+    "Distinct default exchange selections after Control assignment",
+    "Analyst and Viewer masked response diff",
+    "Viewer mutation controls and new-note editor absent",
+    "Admin Add user and Change role dialogs opened and cancelled",
+    "Audit actor filter and Enter search"
+  ]
+}

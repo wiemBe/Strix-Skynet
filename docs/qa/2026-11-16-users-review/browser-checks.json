@@ -1,0 +1,79 @@
+{
+  "date": "2026-11-16",
+  "checks": [
+    {
+      "height": 768,
+      "scrollWidth": 1366,
+      "view": "admin-settings",
+      "width": 1366
+    },
+    {
+      "height": 1080,
+      "scrollWidth": 1920,
+      "view": "admin-settings",
+      "width": 1920
+    },
+    {
+      "height": 768,
+      "scrollWidth": 1366,
+      "view": "audit",
+      "width": 1366
+    },
+    {
+      "height": 1080,
+      "scrollWidth": 1920,
+      "view": "audit",
+      "width": 1920
+    },
+    {
+      "height": 768,
+      "scrollWidth": 1366,
+      "view": "report",
+      "width": 1366
+    },
+    {
+      "height": 1080,
+      "scrollWidth": 1920,
+      "view": "report",
+      "width": 1920
+    },
+    {
+      "height": 768,
+      "scrollWidth": 1366,
+      "view": "viewer-workspace",
+      "visibleMutationButtons": [
+        "Confirm match",
+        "Reject match",
+        "Clear"
+      ],
+      "width": 1366
+    },
+    {
+      "height": 1080,
+      "scrollWidth": 1920,
+      "view": "viewer-workspace",
+      "visibleMutationButtons": [
+        "Confirm match",
+        "Reject match",
+        "Clear"
+      ],
+      "width": 1920
+    },
+    {
+      "footerBottom": 1054.59375,
+      "height": 768,
+      "scrollWidth": 1366,
+      "view": "viewer-report",
+      "width": 1366
+    }
+  ],
+  "console": [],
+  "viewerVisibleButDenied": [
+    "Confirm match",
+    "Reject match",
+    "Clear"
+  ],
+  "environment": "Disposable QA fixture with synthetic accounts/findings; no worker/scheduler/Strix/provider call",
+  "pdfGenerated": false,
+  "measurement_note": "Viewer workspace measurements keep the final authenticated captures; initial login-navigation captures were discarded. Viewer 1920 report screenshot exists, but no separate scroll-width measure was recorded."
+}

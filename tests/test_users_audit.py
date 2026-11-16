@@ -290,6 +290,7 @@ class TestReport(Base):
                                               "title": "IDOR on invoices", "endpoint": "/api/invoices/{id}", "first_seen_at": iso(now - timedelta(days=20))})
         g_fixed = db.insert("finding_groups", {"target_id": tid, "fingerprint": _uniq("f"), "severity": "critical", "remediation": "fixed",
                                                "title": "SQLi", "first_seen_at": iso(now - timedelta(days=20)),
+                                               "fixed_at": iso(now - timedelta(days=12)),
                                                "remediation_at": iso(now - timedelta(days=12))})
         for gid in (g_open, g_fixed):
             db.insert("finding_occurrences", {"group_id": gid, "scan_id": s1, "run_name": _uniq("r"), "strix_id": "v1",
@@ -332,3 +333,168 @@ class TestReport(Base):
             self.assertIsNotNone(report._dt(v), v)
             self.assertIsNotNone(report._dt(v).tzinfo, v)
         self.assertIsNone(report._dt("not a date"))
+
+
+class TestReviewRegressions(Base):
+    def profile(self, secret):
+        from skynet import vault
+        return vault.save({"kind": "header", "name": _uniq("masking"),
+                           "headers": [{"name": "Authorization", "value": "Bearer " + secret}]}, None)
+
+    def test_audit_masks_known_and_historical_values_before_storage_and_truncation(self):
+        from skynet import crypto, vault
+        secret = _uniq("historical-credential-")
+        pid = self.profile(secret)
+        tid = db.insert("targets", {"name": "Masking fixture", "base_url": "http://127.0.0.1:8899"})
+        db.insert("scans", {"target_id": tid, "redact_enc": crypto.vault_encrypt(json.dumps([secret]))})
+        # Even after the profile is removed, retained scan values protect new audit records.
+        db.execute("DELETE FROM auth_profiles WHERE id=?", (pid,))
+        text = "x" * 295 + secret
+        audit.record("system", "agent.instruct", summary=text)
+        row = self.last_audit(action="agent.instruct")
+        self.assertNotIn(secret, row["summary"])
+        self.assertNotIn(secret[:5], row["summary"])
+        self.assertIn("••", row["summary"])
+        self.assertNotIn(secret, json.dumps(audit.entries()))
+        self.assertNotIn(secret, vault.stored_redactor().text(secret))
+
+    def test_agent_instruction_audit_uses_redaction_on_the_real_route(self):
+        from skynet import crypto
+        secret = _uniq("agent-credential-")
+        self.profile(secret)
+        with tempfile.TemporaryDirectory(prefix="skynet-agent-mask-") as tmp:
+            rd = Path(tmp)
+            (rd / ".state").mkdir()
+            (rd / ".state/agents.json").write_text(json.dumps({"statuses": {"a1": "running"},
+                                                                  "names": {"a1": "Agent " + secret}}))
+            tid = db.insert("targets", {"name": "Local fixture", "base_url": "http://127.0.0.1:8899"})
+            sid = db.insert("scans", {"target_id": tid, "status": "running", "run_dir": str(rd)})
+            mid = db.insert("agent_messages", {"scan_id": sid, "agent_id": "a1", "request_id": _uniq("msg"),
+                                               "content_enc": crypto.vault_encrypt("fixture instruction")})
+            with mock.patch.object(self.M.control, "send", return_value={"id": mid}):
+                st, _ = self.call(f"/api/scans/{sid}/messages", "POST", {"agent_id": "a1", "content": "fixture instruction"},
+                                  user=self.user("analyst"))
+            self.assertEqual(st, 200)
+            self.assertNotIn(secret, json.dumps(self.last_audit(action="agent.instruct")))
+
+    def test_audit_read_masks_values_learned_after_the_event(self):
+        secret = _uniq("newly-known-")
+        db.insert("audit_log", {"at": db.now_iso(), "actor": "system", "action": "scan.import", "summary": secret})
+        self.profile(secret)
+        admin = self.user("admin")
+        st, body = self.call("/api/audit", user=admin)
+        self.assertEqual(st, 200)
+        self.assertNotIn(secret, json.dumps(body))
+
+    def test_unreadable_historical_masking_context_does_not_write_unsafe_audit(self):
+        from skynet import crypto
+        tid = db.insert("targets", {"name": "Unreadable masking fixture", "base_url": "http://127.0.0.1:8899"})
+        sid = db.insert("scans", {"target_id": tid, "redact_enc": "not-a-valid-encrypted-snapshot"})
+        marker = _uniq("must-not-store-")
+        try:
+            with self.assertRaises(crypto.DecryptError):
+                audit.record("system", "scan.import", summary=marker)
+            self.assertFalse(db.q1("SELECT id FROM audit_log WHERE summary=?", (marker,)))
+        finally:
+            db.execute("DELETE FROM scans WHERE id=?", (sid,))
+
+    def test_disabling_permanently_revokes_cookie_after_reenable(self):
+        admin, user = self.user("admin"), self.user("analyst")
+        old = auth.make_session(user)
+        for _ in range(2):
+            self.assertEqual(self.call(f"/api/users/{user['id']}", "PUT", {"active": False}, user=admin)[0], 200)
+            self.assertEqual(self.call("/api/me", cookie=old)[0], 401)
+            self.assertEqual(self.call(f"/api/users/{user['id']}", "PUT", {"active": True}, user=admin)[0], 200)
+            self.assertEqual(self.call("/api/me", cookie=old)[0], 401)
+            fresh = auth.get_user(user["id"])
+            self.assertEqual(self.call("/api/me", cookie=auth.make_session(fresh))[0], 200)
+            old = auth.make_session(fresh)
+
+    def test_fixed_transition_is_stable_on_notes_and_resets_on_reopen(self):
+        from skynet import report
+        user = self.user("analyst")
+        tid = db.insert("targets", {"name": "Timing fixture", "base_url": "http://127.0.0.1:8899"})
+        sid = db.insert("scans", {"target_id": tid, "status": "completed"})
+        gid = db.insert("finding_groups", {"target_id": tid, "fingerprint": _uniq("timing"), "severity": "high",
+                                           "remediation": "open", "first_seen_at": "2026-01-01T00:00:00+00:00"})
+        db.insert("finding_occurrences", {"group_id": gid, "scan_id": sid, "run_name": _uniq("timing"), "strix_id": "v1"})
+        def patch(day, rem, note):
+            with mock.patch.object(db, "now_iso", return_value=f"2026-01-{day:02}T00:00:00+00:00"):
+                self.assertEqual(self.call(f"/api/findings/{gid}", "PATCH", {"remediation": rem, "remediation_note": note}, user=user)[0], 200)
+        patch(2, "fixed", "ticket opened")
+        patch(10, "fixed", "ticket note updated")
+        self.assertEqual(db.get("finding_groups", gid)["remediation_at"], "2026-01-02T00:00:00+00:00")
+        self.assertEqual(report.for_target(tid)["findings"]["time_to_fix"]["high"]["median"], 1.0)
+        patch(11, "open", "reopened")
+        self.assertIsNone(db.get("finding_groups", gid)["fixed_at"])
+        patch(12, "fixed", "fixed again")
+        self.assertEqual(report.for_target(tid)["findings"]["time_to_fix"]["high"]["median"], 11.0)
+
+    def test_legacy_fixed_time_is_unknown_instead_of_using_last_note_time(self):
+        from skynet import report
+        tid, *_ = TestReport.fixture(self)
+        db.execute("UPDATE finding_groups SET fixed_at=NULL WHERE target_id=? AND remediation='fixed'", (tid,))
+        f = report.for_target(tid)["findings"]
+        self.assertEqual(f["summary"]["remediation"]["fixed"], 1)
+        self.assertEqual(f["time_to_fix"]["all"], {"n": 0, "median": None, "max": None})
+        self.assertEqual(f["fixed_time_unknown"], 1)
+
+    def test_all_report_metadata_and_generator_are_masked(self):
+        from skynet import crypto, report
+        secret = _uniq("report-credential-")
+        pid = self.profile(secret)
+        tid = db.insert("targets", {"name": "Target " + secret, "base_url": "http://127.0.0.1:8899/?password=" + secret})
+        db.insert("scans", {"target_id": tid, "status": "completed", "redact_enc": crypto.vault_encrypt(json.dumps([secret]))})
+        cid = db.insert("campaigns", {"name": "Campaign " + secret, "description": "x" * 190 + secret})
+        db.insert("campaign_targets", {"campaign_id": cid, "target_id": tid})
+        db.execute("DELETE FROM auth_profiles WHERE id=?", (pid,))
+        viewer = self.user("viewer")
+        db.execute("UPDATE users SET display_name=? WHERE id=?", (secret, viewer["id"]))
+        for path in (f"/api/targets/{tid}/report", f"/api/campaigns/{cid}/report"):
+            st, data = self.call(path, user=viewer)
+            self.assertEqual(st, 200)
+            self.assertNotIn(secret, json.dumps(data))
+            self.assertNotEqual(data["generated_by"], secret)
+        campaign_report = report.for_campaign(cid)
+        self.assertNotIn(secret, json.dumps(campaign_report))
+        self.assertNotIn(secret[:10], campaign_report["subtitle"])
+
+    def test_v7_backs_up_and_repairs_audit_without_inventing_fix_times(self):
+        from skynet import crypto
+        with tempfile.TemporaryDirectory(prefix="skynet-migration7-") as tmp:
+            p, old = Path(tmp), db._conn
+            try:
+                db._conn = None
+                with mock.patch.multiple(db, DB_PATH=p / "skynet.db", DATA_DIR=p):
+                    c = db.conn()
+                    c.executescript(db.SCHEMA)
+                    with mock.patch.object(db, "MIGRATIONS", [m for m in db.MIGRATIONS if m[0] <= 6]):
+                        db.migrate()
+                    disabled = self.user("analyst")
+                    old_cookie = auth.make_session(disabled)
+                    db.execute("UPDATE users SET active=0 WHERE id=?", (disabled["id"],))
+                    secret = _uniq("legacy-audit-")
+                    db.insert("auth_profiles", {"name": "Legacy profile", "kind": "header", "secret_enc": crypto.vault_encrypt(json.dumps({"headers": {"Authorization": "Bearer " + secret}}))})
+                    aid = db.insert("audit_log", {"at": "2026-01-01", "actor": "system", "action": "agent.instruct", "summary": secret, "status": 200})
+                    tid = db.insert("targets", {"name": "Legacy fixture", "base_url": "http://127.0.0.1:8899"})
+                    gid = db.insert("finding_groups", {"target_id": tid, "fingerprint": _uniq("legacy"), "remediation": "fixed", "remediation_at": "2026-01-02"})
+                    db.migrate()
+                    migration = db.migrations_applied()[-1]
+                    self.assertEqual(migration["version"], 7)
+                    self.assertEqual(db.get("audit_log", aid)["summary"], "••••••")
+                    self.assertEqual(db.get("audit_log", aid)["at"], "2026-01-01")
+                    self.assertIsNone(db.get("finding_groups", gid)["fixed_at"])
+                    self.assertEqual(db.q1("SELECT session_version FROM users LIMIT 1")["session_version"], 0)
+                    self.assertEqual(auth.get_user(disabled["id"])["session_version"], 1)
+                    db.execute("UPDATE users SET active=1 WHERE id=?", (disabled["id"],))
+                    self.assertIsNone(auth.valid_session(old_cookie))
+                    with closing(sqlite3.connect(migration["backup"])) as backup:
+                        self.assertEqual(backup.execute("SELECT summary FROM audit_log WHERE id=?", (aid,)).fetchone()[0], secret)
+                    self.assertEqual(Path(migration["backup"]).stat().st_mode & 0o777, 0o600)
+                    before = len(list((p / "backups").glob("*.db")))
+                    db.migrate()
+                    self.assertEqual(len(list((p / "backups").glob("*.db"))), before)
+            finally:
+                if db._conn is not None:
+                    db._conn.close()
+                db._conn = old

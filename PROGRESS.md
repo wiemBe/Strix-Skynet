@@ -1,6 +1,61 @@
 # Skynet — çalışma takibi
 
-Güncelleme: 16 Kasım 2026 · Europe/Istanbul (son çalışma: main üzerinde birleştirme)
+Güncelleme: 16 Kasım 2026 · Europe/Istanbul (son çalışma: aynı RHEL sunucusunda Nginx/IP erişimi hazırlığı)
+
+## Aynı sunucuda Nginx / IP ile erişim — 16 Kasım 2026
+
+Kullanıcı Nginx'in uygulamayla aynı sunucuya kurulmasını istedi; `10.90.10.10` örnek adres, gerçek test ortamı
+henüz verilmedi. [Kurulum](docs/NGINX.md), [QA](docs/qa/2026-11-16-nginx/README.md).
+
+- [x] RHEL 9.4+ x86_64 için dry-run/--apply kurucu: gerçek atanmış IP, istemci CIDR allowlist'i ve firewall zone'u.
+- [x] Nginx IP'de 80/443; backend yalnız 127.0.0.1:8787. Aynı IP'deki varsayılan vhost, tüm GUI/API proxy'si.
+- [x] HTTP ve sağlanan IP SAN'lı sertifikayla HTTPS; sabit IP'ye redirect, Secure cookie uyumu.
+- [x] Scoped firewalld rich rule'ları, RHEL reverse proxy SELinux boolean'ı; mevcut nginx.conf korunuyor.
+  Managed vhost yedeği ve başarısız nginx -t halinde dosya geri yükleme. Skynet restart edilmiyor.
+- [x] Proxy cache/buffering/retry kapalı; istemci IP başlıkları üzerine yazılıyor. Uvicorn yalnız loopback peer'e güveniyor.
+- [x] Gerçek UBI 9 x86_64 / Nginx 1.20.1 ile HTTP+HTTPS login/session/CSRF/ACL/static/IP-spoof/log/redirect testleri geçti.
+- [x] 8 yeni deployment testiyle **191/191 test OK**; shell/diff kontrolü geçti.
+- [ ] Gerçek RHEL host IP/SSH bilgisi verilince paket/servis/firewall/SELinux uygulaması ve uzak tarayıcı kabulü.
+
+Bu turda gerçek host'a Nginx kurulmadı, IP atanmadı; Mac ağı değiştirilmedi. Asıl DB/anahtar/taramalar korunuyor.
+Yerel QA konteyneri host portu yayınlamadı; yalnız geçici kayıtlarla çalıştı. Commit/merge/push yapılmadı.
+
+## Kullanıcı/audit/rapor düzeltmeleri ve görsel QA — Codex, 16 Kasım 2026
+
+[Düzeltme raporu](docs/reviews/2026-11-16-users-audit-report-fixes.md),
+[QA ekranları ve test çıktıları](docs/qa/2026-11-16-users-fixes/README.md).
+
+- [x] R1 — Audit metadata'sı güncel ve saklanan eski sırlarla yazmadan/kesmeden önce, ayrıca okurken maskeli.
+- [x] R2 — Disable eski oturumları kalıcı iptal ediyor; re-enable eski çerezle giriş sağlamıyor.
+- [x] R3 — Sabit Fixed geçiş zamanı; not düzenlemesi süreyi değiştirmiyor. Eski belirsiz zamanlar Unknown.
+- [x] R4 — Raporun başlık/hedef/kampanya metadata'sı ve hazırlayan adı da maskeli.
+- [x] R5 — Viewer workspace mutasyonları gizli, not editörü yok; Analyst işlevleri korunuyor.
+- [x] QA'da bulunan Control-only aynı istek seçimi ve uzun rol açıklamasındaki kart hizası düzeltildi.
+- [x] 9 yeni regresyonla **183/183 test OK**; JS/diff kontrolü geçti.
+- [x] 1366×768 / 1920×1080, 32 görüntü; Admin/Analyst/Viewer etkileşimleri, formlar ve raporlar incelendi.
+  Ölçülen sayfalarda yatay taşma ve browser warning/error yok.
+- Migration 7 hazır: tutarlı yedek sonrası session_version/fixed_at ve eski audit metadata gizlilik onarımı.
+  Asıl DB/anahtar değiştirilmedi; yalnız geçici fixture'lar migrate edildi. Eski yedekler yeniden yazılmaz.
+  Gerçek PDF/RHEL sunucu kabulü bu turda yapılmadı. Commit/merge/push yapılmadı.
+
+## Kullanıcı, audit ve rapor — tarihsel inceleme, 16 Kasım 2026
+
+Aşağıdaki beş kusur yukarıdaki düzeltmelerle kapatıldı; bölüm ilk incelemenin tarihsel kaydıdır.
+
+İncelenen yeni commit `4f04aa2`, branch `users-roles-audit-report`.
+[İnceleme ve tekrar üretim adımları](docs/reviews/2026-11-16-users-audit-report-review.md),
+[QA kanıtları](docs/qa/2026-11-16-users-review/README.md).
+
+- [x] 174/174 mevcut test; JavaScript sözdizimi ve diff kontrolü geçti.
+- [x] Admin ve Viewer ekranları 1366×768 / 1920×1080'de incelendi; yatay taşma/konsol hatası görülmedi.
+- [ ] R1/P1 — Audit özeti bilinen Vault sırrını açık metin saklayıp döndürüyor.
+- [ ] R2/P2 — Devre dışı bırakılıp açılan hesapta eski oturum çerezi yeniden geçerli oluyor.
+- [ ] R3/P2 — Fixed bulgunun yalnız notunu değiştirmek rapordaki düzeltme süresini değiştiriyor.
+- [ ] R4/P2 — Rapor başlığı/hedef metadata'sı bilinen sır maskelemesini atlıyor.
+- [ ] R5/P3 — Viewer'a sunucunun reddettiği düzenleme düğmeleri gösteriliyor.
+
+Uygulama kodu değiştirilmedi; merge/push yapılmadı. Yalnız izole fixture DB/anahtar kullanıldı;
+Strix/LLM/dış hedef çalıştırılmadı. Yeni RHEL kabulü ve PDF üretimi yapılmadı.
 
 ## Branch'lerin main üzerinde birleştirilmesi — Codex, 16 Kasım 2026
 

@@ -83,6 +83,7 @@ def _findings(scan_ids: list[int], now: datetime) -> dict[str, Any]:
     open_age: dict[str, list[float]] = {s: [] for s in SEVERITIES}
     fix_days: dict[str, list[float]] = {s: [] for s in SEVERITIES}
     top = []
+    fixed_unknown = 0
     for g in groups:
         sev = g["severity"] if g["severity"] in open_age else "info"
         first = _dt(g.get("first_seen_at"))
@@ -92,9 +93,11 @@ def _findings(scan_ids: list[int], now: datetime) -> dict[str, Any]:
                 open_age[sev].append(age)
             top.append((g, age))
         elif g["remediation"] == "fixed":
-            d = _days(first, _dt(g.get("remediation_at")))
+            d = _days(first, _dt(g.get("fixed_at")))
             if d is not None:
                 fix_days[sev].append(d)
+            else:
+                fixed_unknown += 1
     top.sort(key=lambda x: (-runs.SEV_RANK.get(x[0]["severity"], 0), -(x[1] or 0)))
     open_rows = []
     for g, age in top[:TOP_OPEN]:
@@ -108,6 +111,7 @@ def _findings(scan_ids: list[int], now: datetime) -> dict[str, Any]:
     return {"summary": summary, "open_total": sum(summary["open_counts"].values()), "open_more": max(0, len(top) - TOP_OPEN),
             "open_age": {s: _stats(v) for s, v in open_age.items()},
             "time_to_fix": {**{s: _stats(v) for s, v in fix_days.items()}, "all": _stats(all_fix)},
+            "fixed_time_unknown": fixed_unknown,
             "top_open": open_rows}
 
 
@@ -126,14 +130,15 @@ def for_target(tid: int) -> dict[str, Any]:
     t = db.get("targets", tid)
     scans = db.list_scans(target_id=tid, limit=5000)
     now = datetime.now(timezone.utc)
-    return {"kind": "target", "id": tid, "name": t["name"], "environment": t.get("environment"),
+    return vault.stored_redactor().obj({"kind": "target", "id": tid, "name": t["name"], "environment": t.get("environment"),
             "subtitle": t.get("base_url"), "generated_at": now.isoformat(timespec="seconds"),
             "scans": _scan_stats(scans), "trend": _trend(scans), "coverage": _coverage(scans),
-            "findings": _findings([s["id"] for s in scans], now), "targets": None, **_notes()}
+            "findings": _findings([s["id"] for s in scans], now), "targets": None, **_notes()}, strict=True)
 
 
 def for_campaign(cid: int) -> dict[str, Any]:
     c = db.get("campaigns", cid)
+    red = vault.stored_redactor()
     ids = campaigns.scan_ids(cid)
     scans = sorted((db.get_scan(i) for i in ids), key=lambda s: (s.get("started_at") or s.get("created_at") or "", s["id"]),
                    reverse=True)
@@ -148,10 +153,10 @@ def for_campaign(cid: int) -> dict[str, Any]:
         cov = _coverage(ts)
         per_target.append({"id": tid, "name": t["name"], "environment": t.get("environment"), "scans": _scan_stats(ts),
                            "open_counts": f["open_counts"], "coverage": cov and {k: cov[k] for k in ("scan_id", "counts", "cells", "available")}})
-    return {"kind": "campaign", "id": cid, "name": c["name"], "environment": c.get("environment") or None,
-            "subtitle": (c.get("description") or "").strip()[:200], "campaign_status": c.get("status"),
+    return red.obj({"kind": "campaign", "id": cid, "name": c["name"], "environment": c.get("environment") or None,
+            "subtitle": red.text(c.get("description"), strict=True).strip()[:200], "campaign_status": c.get("status"),
             "generated_at": now.isoformat(timespec="seconds"), "scans": _scan_stats(scans), "trend": _trend(scans),
-            "coverage": None, "findings": _findings(ids, now), "targets": per_target, **_notes()}
+            "coverage": None, "findings": _findings(ids, now), "targets": per_target, **_notes()}, strict=True)
 
 
 def _notes() -> dict[str, Any]:
@@ -159,5 +164,6 @@ def _notes() -> dict[str, Any]:
         "Findings come from Strix agents, grouped by fingerprint (a correlation, not proof of one root cause).",
         "\"Fixed\" is an analyst's status in Skynet, not proof; a finding missing from a later scan is not counted as fixed.",
         "Incomplete scans (cancelled, failed, interrupted) are marked in the trend; their lower counts are not an improvement.",
+        "Time to fix uses recorded transitions to Fixed. Historical fixed findings without a reliable transition time are excluded, not counted as zero.",
         "Coverage \"Tested\" needs a verified test with linked evidence; it does not mean secure. No SLA data exists for deadline compliance.",
     ]}

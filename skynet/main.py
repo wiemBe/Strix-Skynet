@@ -1218,7 +1218,7 @@ def campaign_findings(cid: int) -> dict[str, Any]:
 
 def _report_out(request: Request, data: dict[str, Any]) -> dict[str, Any]:
     u = _user(request)
-    data["generated_by"] = u.get("display_name") or u["username"]
+    data["generated_by"] = vault.stored_redactor().text(u.get("display_name") or u["username"], strict=True)
     data["timezone"] = TIMEZONE
     audit.record(u["username"], "report.view", actor_id=u["id"], actor_role=u["role"], object_type=data["kind"],
                  object_id=data["id"], summary=data["name"], method="GET", path=request.url.path, status=200,
@@ -1349,8 +1349,11 @@ def finding_patch(gid: int, request: Request, body: dict[str, Any] = Body(...)) 
         bad("Invalid status")
     title = vault.finding_redactor(gid).text(str(g.get("title") or ""), strict=True)[:120]
     _audit_note(request, summary=f"{g.get('remediation')} → {rem} · {title}")
-    db.execute("UPDATE finding_groups SET remediation=?, remediation_note=?, remediation_at=? WHERE id=?",
-               (rem, (body.get("remediation_note") or "").strip(), db.now_iso(), gid))
+    changed = rem != g.get("remediation")
+    at = db.now_iso() if changed else g.get("remediation_at")
+    fixed_at = (at if rem == "fixed" else None) if changed else g.get("fixed_at")
+    db.execute("UPDATE finding_groups SET remediation=?, remediation_note=?, remediation_at=?, fixed_at=? WHERE id=?",
+               (rem, (body.get("remediation_note") or "").strip(), at, fixed_at, gid))
     return finding_get(gid)
 
 

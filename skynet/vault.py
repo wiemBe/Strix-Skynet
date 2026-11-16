@@ -132,6 +132,34 @@ def scan_redactor(scan: dict[str, Any]) -> Redactor:
     return global_redactor(snap)
 
 
+_stored_cache: dict[str, Any] = {"sig": None}
+
+
+def stored_redactor() -> Redactor:
+    """Current Vault values and retained scan snapshots, even after rotation/deletion.
+
+    Used for cross-scan exports and audit metadata. Fail closed if a retained snapshot
+    cannot be decrypted; silently dropping it could expose a historical credential.
+    The cache signature contains ciphertext only.
+    """
+    profiles = db.q("SELECT id, secret_enc FROM auth_profiles ORDER BY id")
+    snapshots = db.q("SELECT DISTINCT redact_enc FROM scans WHERE COALESCE(redact_enc,'')<>'' ORDER BY redact_enc")
+    sig = (tuple((p["id"], p.get("secret_enc")) for p in profiles), tuple(s["redact_enc"] for s in snapshots))
+    if _stored_cache["sig"] != sig:
+        values = []
+        for p in profiles:
+            # Unlike the display helper secret_values(), do not ignore unreadable secrets.
+            secrets_of(p)
+            values.extend(secret_values(p))
+        for row in snapshots:
+            snapshot = json.loads(crypto.vault_decrypt(row["redact_enc"]) or "[]")
+            if not isinstance(snapshot, list) or any(not isinstance(v, str) for v in snapshot):
+                raise ValueError("Invalid masking snapshot")
+            values.extend(snapshot)
+        _stored_cache.update(sig=sig, r=Redactor(values))
+    return _stored_cache["r"]
+
+
 def finding_redactor(group_id: int) -> Redactor:
     """Mask historical group metadata after rotation, even if source files were removed."""
     values = []

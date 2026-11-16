@@ -1,0 +1,24 @@
+......./opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/unittest/mock.py:2263: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x108888900>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/unittest/mock.py:2263: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10888bae0>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/unittest/mock.py:2263: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x108924c80>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/unittest/mock.py:2263: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x108924d60>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/unittest/mock.py:2263: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x108924ba0>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/unittest/mock.py:2263: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x108924f20>
+  def __init__(self, name, parent):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+...............................................................................2026-11-16 17:52:56,483 WARNING skynet.control: ignoring control file with unsafe permissions: scan_11_control.json
+.........................................................................................................
+----------------------------------------------------------------------
+Ran 191 tests in 12.800s
+
+OK

@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from . import db
+from . import db, vault
 
 ROLE_RANK = {"viewer": 1, "analyst": 2, "admin": 3}
 
@@ -134,11 +134,32 @@ def allowed(role: str | None, need: str) -> bool:
 def record(actor: str, action: str, *, actor_id: int | None = None, actor_role: str = "", object_type: str = "",
            object_id: Any = "", summary: str = "", method: str = "", path: str = "", status: int | None = None,
            ip: str = "") -> None:
+    # Mask before truncation: cutting a credential first can leave a recognizable prefix.
+    red = vault.stored_redactor()
+    actor, summary, path, ip, object_id = [red.text(str(v or ""), strict=True)
+                                           for v in (actor, summary, path, ip, object_id)]
     db.execute("INSERT INTO audit_log (at, actor, actor_id, actor_role, action, object_type, object_id, summary, "
                "method, path, status, ip) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                (db.now_iso(), str(actor)[:64], actor_id, actor_role, action, object_type,
                 "" if object_id is None else str(object_id)[:64], str(summary or "")[:300], method, path[:200],
                 status, ip[:64]))
+
+
+def sanitize_existing(connection) -> None:
+    """Privacy repair for pre-v7 metadata. Preserve event ids, times and outcomes.
+
+    Runs inside the backed-up migration transaction. Backups are historical originals
+    and may still contain pre-fix metadata; they are not rewritten.
+    """
+    red = vault.stored_redactor()
+    cursor = connection.execute("SELECT id, actor, summary, path, ip, object_id FROM audit_log")
+    while rows := cursor.fetchmany(500):
+        for row in rows:
+            fields = tuple(row[k] for k in ("actor", "summary", "path", "ip", "object_id"))
+            clean = tuple(red.text(str(v or ""), strict=True) for v in fields)
+            if clean != fields:
+                connection.execute("UPDATE audit_log SET actor=?, summary=?, path=?, ip=?, object_id=? WHERE id=?",
+                                   (*clean, row["id"]))
 
 
 def entries(actor: str = "", action: str = "", q: str = "", before: int | None = None,
@@ -155,8 +176,11 @@ def entries(actor: str = "", action: str = "", q: str = "", before: int | None =
     limit = max(1, min(int(limit), 500))
     sql = "SELECT * FROM audit_log" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY id DESC LIMIT ?"
     rows = db.q(sql, (*args, limit + 1))
+    red = vault.stored_redactor()
     for r in rows:
+        for key in ("actor", "summary", "path", "ip", "object_id"):
+            r[key] = red.text(r.get(key), strict=True)
         r["action_label"] = ACTION_LABELS.get(r["action"], r["action"])
-    actors = [r["actor"] for r in db.q("SELECT DISTINCT actor FROM audit_log ORDER BY actor COLLATE NOCASE")]
+    actors = sorted({red.text(r["actor"], strict=True) for r in db.q("SELECT DISTINCT actor FROM audit_log")}, key=str.casefold)
     return {"entries": rows[:limit], "has_more": len(rows) > limit, "actors": actors,
             "actions": sorted(ACTION_LABELS.items(), key=lambda kv: kv[1])}

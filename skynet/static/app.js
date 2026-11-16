@@ -2010,7 +2010,7 @@ async function viewReport(kind, id) {
       tile("Open findings", f.open_total, `${sm.unique} unique finding${sm.unique === 1 ? "" : "s"} in total`),
       tile("Open critical + high", crit, crit ? `${sm.open_counts.critical} critical · ${sm.open_counts.high} high` : "None open", crit ? "hot" : ""),
       tile("Oldest open critical/high", oldestCH == null ? "—" : dayText(oldestCH), "Since first seen"),
-      tile("Median time to fix", f.time_to_fix.all.n ? dayText(f.time_to_fix.all.median) : "—", f.time_to_fix.all.n ? `${f.time_to_fix.all.n} marked fixed` : "Nothing marked fixed yet"),
+      tile("Median time to fix", f.time_to_fix.all.n ? dayText(f.time_to_fix.all.median) : "—", f.time_to_fix.all.n ? `${f.time_to_fix.all.n} with recorded fix time` : sm.remediation.fixed ? "Fix time unavailable" : "Nothing marked fixed yet"),
       tile("Scans", `${sc.completed} / ${sc.total}`, `completed${sc.incomplete ? ` · ${sc.incomplete} incomplete` : ""}${sc.verifications ? ` · ${sc.verifications} verification runs` : ""}`)),
     h("section", { class: "rpt-section rpt-two" },
       h("div", {}, h("h2", {}, "Open findings by severity"), sevBars(), remChips),
@@ -2019,7 +2019,7 @@ async function viewReport(kind, id) {
         : h("p", { class: "rpt-empty" }, "No finished scans yet."))),
     ...(() => {
       const age = h("div", {}, h("h2", {}, "Remediation age"),
-        h("p", { class: "rpt-src" }, "No deadlines (SLA) are set, so compliance isn't shown. Time is counted from first seen."), ageTable);
+        h("p", { class: "rpt-src" }, "No deadlines (SLA) are set, so compliance isn't shown. Time is counted from first seen.", f.fixed_time_unknown ? ` ${f.fixed_time_unknown} fixed finding${f.fixed_time_unknown === 1 ? " has" : "s have"} no reliable fix time and ${f.fixed_time_unknown === 1 ? "is" : "are"} excluded.` : ""), ageTable);
       return kind === "targets"
         ? [h("section", { class: "rpt-section rpt-two even" }, age, h("div", {}, h("h2", {}, "Test coverage"), coverageBlock))]
         : [h("section", { class: "rpt-section" }, age), h("section", { class: "rpt-section" }, h("h2", {}, "Targets"), coverageBlock)];

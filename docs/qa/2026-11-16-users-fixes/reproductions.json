@@ -1,0 +1,22 @@
+{
+  "audit_secret": {
+    "http_status": 200,
+    "known_secret_in_audit_database": false,
+    "known_secret_in_audit_api": false,
+    "normal_scan_redactor_masks_it": true
+  },
+  "old_session_after_reenable": {
+    "while_disabled": 401,
+    "same_old_cookie_after_reenable": 401
+  },
+  "time_to_fix_note_edit": {
+    "http_status": 200,
+    "before_days": 1.0,
+    "after_days": 1.0,
+    "status_stayed_fixed": true
+  },
+  "report_metadata_secret": {
+    "http_status": 200,
+    "known_secret_in_report": false
+  }
+}

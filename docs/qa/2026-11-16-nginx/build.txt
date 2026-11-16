@@ -1,0 +1,131 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Containerfile
+#1 transferring dockerfile: 136B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/skynet-rhel9-qa:local
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/3] FROM docker.io/library/skynet-rhel9-qa:local@sha256:d6e4920226a9c8fb7c386f25facd335a40d38fa96c87f63d38ef3d0923e7a427
+#4 resolve docker.io/library/skynet-rhel9-qa:local@sha256:d6e4920226a9c8fb7c386f25facd335a40d38fa96c87f63d38ef3d0923e7a427 done
+#4 CACHED
+
+#5 [2/3] RUN dnf install -y nginx openssl && dnf clean all
+#5 1.258 Updating Subscription Management repositories.
+#5 1.259 Unable to read consumer identity
+#5 1.274
+#5 1.274 This system is not registered with an entitlement server. You can use subscription-manager to register.
+#5 1.274
+#5 2.156 Red Hat Universal Base Image 9 (RPMs) - BaseOS  778 kB/s | 535 kB     00:00
+#5 3.380 Red Hat Universal Base Image 9 (RPMs) - AppStre 3.9 MB/s | 3.0 MB     00:00
+#5 6.562 Red Hat Universal Base Image 9 (RPMs) - CodeRea 809 kB/s | 471 kB     00:00
+#5 7.502 Package openssl-1:3.5.8-2.el9_8.x86_64 is already installed.
+#5 7.606 Dependencies resolved.
+#5 7.613 ================================================================================
+#5 7.613  Package             Arch    Version                Repository             Size
+#5 7.613 ================================================================================
+#5 7.613 Installing:
+#5 7.613  nginx               x86_64  2:1.20.1-32.el9_9.1    ubi-9-appstream-rpms   45 k
+#5 7.613 Upgrading:
+#5 7.613  openssl             x86_64  1:3.5.9-1.el9_9        ubi-9-baseos-rpms     1.5 M
+#5 7.613  openssl-devel       x86_64  1:3.5.9-1.el9_9        ubi-9-appstream-rpms  4.8 M
+#5 7.613  openssl-libs        x86_64  1:3.5.9-1.el9_9        ubi-9-baseos-rpms     2.3 M
+#5 7.613 Installing dependencies:
+#5 7.613  nginx-core          x86_64  2:1.20.1-32.el9_9.1    ubi-9-appstream-rpms  582 k
+#5 7.613  nginx-filesystem    noarch  2:1.20.1-32.el9_9.1    ubi-9-appstream-rpms   17 k
+#5 7.613  redhat-logos-httpd  noarch  90.6-1.el9             ubi-9-appstream-rpms   15 k
+#5 7.613 Installing weak dependencies:
+#5 7.613  logrotate           x86_64  3.18.0-12.el9          ubi-9-baseos-rpms      74 k
+#5 7.613
+#5 7.613 Transaction Summary
+#5 7.613 ================================================================================
+#5 7.613 Install  5 Packages
+#5 7.613 Upgrade  3 Packages
+#5 7.613
+#5 7.616 Total download size: 9.4 M
+#5 7.617 Downloading Packages:
+#5 7.866 (1/8): nginx-filesystem-1.20.1-32.el9_9.1.noarc  72 kB/s |  17 kB     00:00
+#5 7.904 (2/8): logrotate-3.18.0-12.el9.x86_64.rpm       265 kB/s |  74 kB     00:00
+#5 7.917 (3/8): redhat-logos-httpd-90.6-1.el9.noarch.rpm 307 kB/s |  15 kB     00:00
+#5 7.962 (4/8): nginx-1.20.1-32.el9_9.1.x86_64.rpm       801 kB/s |  45 kB     00:00
+#5 8.045 (5/8): nginx-core-1.20.1-32.el9_9.1.x86_64.rpm  1.3 MB/s | 582 kB     00:00
+#5 8.191 (6/8): openssl-3.5.9-1.el9_9.x86_64.rpm         5.5 MB/s | 1.5 MB     00:00
+#5 8.211 (7/8): openssl-libs-3.5.9-1.el9_9.x86_64.rpm    9.4 MB/s | 2.3 MB     00:00
+#5 8.256 (8/8): openssl-devel-3.5.9-1.el9_9.x86_64.rpm    23 MB/s | 4.8 MB     00:00
+#5 8.266 --------------------------------------------------------------------------------
+#5 8.267 Total                                            14 MB/s | 9.4 MB     00:00
+#5 9.130 Running transaction check
+#5 9.328 Transaction check succeeded.
+#5 9.328 Running transaction test
+#5 9.934 Transaction test succeeded.
+#5 9.940 Running transaction
+#5 10.35   Preparing        :                                                        1/1
+#5 10.71   Upgrading        : openssl-libs-1:3.5.9-1.el9_9.x86_64                   1/11
+#5 10.72   Running scriptlet: nginx-filesystem-2:1.20.1-32.el9_9.1.noarch           2/11
+#5 10.97   Installing       : nginx-filesystem-2:1.20.1-32.el9_9.1.noarch           2/11
+#5 11.00   Installing       : nginx-core-2:1.20.1-32.el9_9.1.x86_64                 3/11
+#5 11.01   Installing       : redhat-logos-httpd-90.6-1.el9.noarch                  4/11
+#5 11.01   Running scriptlet: logrotate-3.18.0-12.el9.x86_64                        5/11
+#5 11.05   Installing       : logrotate-3.18.0-12.el9.x86_64                        5/11
+#5 11.06   Running scriptlet: logrotate-3.18.0-12.el9.x86_64                        5/11
+#5 11.21 Created symlink /etc/systemd/system/timers.target.wants/logrotate.timer → /usr/lib/systemd/system/logrotate.timer.
+#5 11.21
+#5 11.22   Installing       : nginx-2:1.20.1-32.el9_9.1.x86_64                      6/11
+#5 11.22   Running scriptlet: nginx-2:1.20.1-32.el9_9.1.x86_64                      6/11
+#5 11.46   Upgrading        : openssl-1:3.5.9-1.el9_9.x86_64                        7/11
+#5 11.98   Upgrading        : openssl-devel-1:3.5.9-1.el9_9.x86_64                  8/11
+#5 12.07   Cleanup          : openssl-1:3.5.8-2.el9_8.x86_64                        9/11
+#5 12.10   Cleanup          : openssl-devel-1:3.5.8-2.el9_8.x86_64                 10/11
+#5 12.15   Cleanup          : openssl-libs-1:3.5.8-2.el9_8.x86_64                  11/11
+#5 12.26   Running scriptlet: openssl-libs-1:3.5.8-2.el9_8.x86_64                  11/11
+#5 12.88   Verifying        : logrotate-3.18.0-12.el9.x86_64                        1/11
+#5 12.88   Verifying        : nginx-core-2:1.20.1-32.el9_9.1.x86_64                 2/11
+#5 12.88   Verifying        : nginx-filesystem-2:1.20.1-32.el9_9.1.noarch           3/11
+#5 12.88   Verifying        : redhat-logos-httpd-90.6-1.el9.noarch                  4/11
+#5 12.88   Verifying        : nginx-2:1.20.1-32.el9_9.1.x86_64                      5/11
+#5 12.88   Verifying        : openssl-1:3.5.9-1.el9_9.x86_64                        6/11
+#5 12.88   Verifying        : openssl-1:3.5.8-2.el9_8.x86_64                        7/11
+#5 12.88   Verifying        : openssl-libs-1:3.5.9-1.el9_9.x86_64                   8/11
+#5 12.88   Verifying        : openssl-libs-1:3.5.8-2.el9_8.x86_64                   9/11
+#5 12.88   Verifying        : openssl-devel-1:3.5.9-1.el9_9.x86_64                 10/11
+#5 12.88   Verifying        : openssl-devel-1:3.5.8-2.el9_8.x86_64                 11/11
+#5 13.10 Installed products updated.
+#5 13.29
+#5 13.33 Upgraded:
+#5 13.33   openssl-1:3.5.9-1.el9_9.x86_64         openssl-devel-1:3.5.9-1.el9_9.x86_64
+#5 13.33   openssl-libs-1:3.5.9-1.el9_9.x86_64
+#5 13.33 Installed:
+#5 13.33   logrotate-3.18.0-12.el9.x86_64
+#5 13.33   nginx-2:1.20.1-32.el9_9.1.x86_64
+#5 13.33   nginx-core-2:1.20.1-32.el9_9.1.x86_64
+#5 13.33   nginx-filesystem-2:1.20.1-32.el9_9.1.noarch
+#5 13.33   redhat-logos-httpd-90.6-1.el9.noarch
+#5 13.33
+#5 13.33 Complete!
+#5 14.59 Updating Subscription Management repositories.
+#5 14.59 Unable to read consumer identity
+#5 14.60
+#5 14.60 This system is not registered with an entitlement server. You can use subscription-manager to register.
+#5 14.60
+#5 14.65 26 files removed
+#5 DONE 14.8s
+
+#6 [3/3] WORKDIR /qa
+#6 DONE 0.0s
+
+#7 exporting to image
+#7 exporting layers
+#7 exporting layers 1.0s done
+#7 exporting manifest sha256:047064319bc0570d04681cbb18dc244cf430566a1d3dbd1caf49236a56bbd1fc done
+#7 exporting config sha256:13ffa4121e8b26f7458bd99c1bd4cc29a0dc9f01e5747399ce669d1b613ebb8e 0.0s done
+#7 exporting attestation manifest sha256:b6c5645b144d960121d416e6b20f56e9eaba27f4619c1a0a443b32cb8a7cf0b6 0.0s done
+#7 exporting manifest list sha256:4843897cc81f3c8e768710c0da0e3266bd03f6828480d822c17d37b368d6fd1e done
+#7 naming to docker.io/library/skynet-nginx-qa:local done
+#7 DONE 1.1s
+
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/cqxjg8ygul0qgip4k22457ewk

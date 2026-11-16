@@ -1,0 +1,6 @@
+# QA only. First build deploy/rhel/Containerfile.qa as skynet-rhel9-qa:local.
+# No source context needed: docker build --platform linux/amd64 -t skynet-nginx-qa:local - < this-file
+FROM skynet-rhel9-qa:local
+USER 0
+RUN dnf install -y nginx openssl && dnf clean all
+WORKDIR /qa

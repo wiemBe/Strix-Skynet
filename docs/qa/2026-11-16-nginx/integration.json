@@ -1,0 +1,37 @@
+{
+  "platform": "x86_64",
+  "nginx": "nginx version: nginx/1.20.1",
+  "checks": [
+    {
+      "transport": "http",
+      "nginx_config_test": true,
+      "login_and_session": true,
+      "secure_cookie": false,
+      "csrf_enforced": true,
+      "allowed_client_only": true,
+      "static_assets": true,
+      "real_client_ip": true,
+      "spoofed_forwarding_header_rejected": true,
+      "backend_not_network_exposed": true,
+      "query_not_in_access_log": true,
+      "tls_san_and_ca_verified": false,
+      "http_to_https_redirect": false
+    },
+    {
+      "transport": "https",
+      "nginx_config_test": true,
+      "login_and_session": true,
+      "secure_cookie": true,
+      "csrf_enforced": true,
+      "allowed_client_only": true,
+      "static_assets": true,
+      "real_client_ip": true,
+      "spoofed_forwarding_header_rejected": true,
+      "backend_not_network_exposed": true,
+      "query_not_in_access_log": true,
+      "tls_san_and_ca_verified": true,
+      "http_to_https_redirect": true
+    }
+  ],
+  "scope": "Disposable UBI9 container; no production data, host keys, Docker socket, worker, scheduler, Strix or provider call"
+}

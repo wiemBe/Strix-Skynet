@@ -395,7 +395,8 @@ async function viewWorkspace(gid, query) {
   const pick = { left: null, right: null };
   const exs = ctx.exchanges || [];
   const attack = exs.find((x) => x.role === "attack"), control = exs.find((x) => x.role === "control");
-  pick.left = (attack || exs[0] || {}).key || null; pick.right = (control || exs.find((x) => x.key !== pick.left) || {}).key || null;
+  pick.left = (attack || exs.find((x) => x.key !== control?.key) || exs[0] || {}).key || null;
+  pick.right = ((control && control.key !== pick.left ? control : exs.find((x) => x.key !== pick.left)) || {}).key || null;
   const sideBox = h("div", { class: "ex-sides" }), diffBox = h("div", {}), notesBox = h("div", {});
   const label = (x) => `${ROLE_TR[x.role] || x.role} · request ${x.request_id}${x.status != null ? ` · HTTP ${x.status}` : ""}`;
   const sideSel = (side) => {
@@ -411,7 +412,7 @@ async function viewWorkspace(gid, query) {
         x ? h("div", { class: "help" }, `${ROLE_TR[x.role] || x.role} — ${ROLE_SRC_TR[x.role_source] || x.role_source}${x.role_by ? ` (${x.role_by}, ${fmtShort(x.role_at)})` : ""}`) : null,
         x ? exchangePanel(x, label(x)) : h("div", { class: "faint" }, "Nothing selected."),
         x && !x.missing ? h("div", { class: "actions ex-actions" },
-          menu(["attack", "control", "context", "clear"].map((r) => ({ label: r === "clear" ? "Clear my role" : `Mark as ${ROLE_TR[r].toLowerCase()}`, onclick: guard(async () => {
+          menu(["attack", "control", "context", "clear"].map((r) => ({ need: "analyst", label: r === "clear" ? "Clear my role" : `Mark as ${ROLE_TR[r].toLowerCase()}`, onclick: guard(async () => {
             await api(`/api/findings/${gid}/labels`, { method: "POST", body: { run_name: x.run_name, request_id: x.request_id, label: r, occurrence_id: ctx.occurrence_id || null } });
             toast("Role saved (original evidence unchanged)"); router();
           }) })), { label: "Assign role" }),
@@ -428,18 +429,18 @@ async function viewWorkspace(gid, query) {
   const renderNotes = (notes) => {
     const ta = h("textarea", { rows: 3, maxlength: 8000, placeholder: "Analyst note (kept separate from the evidence; never changes remediation or verification)", "aria-label": "New analyst note" });
     notesBox.replaceChildren(h("section", { class: "card card-pad" }, h("div", { class: "sky-row-head" }, h("h3", {}, "Analyst notes"), h("span", { class: "faint" }, "Edits add a revision; history is kept.")),
-      ta, h("div", { class: "actions ex-actions" }, button("Add note", { kind: "primary", size: "sm", onclick: guard(async () => {
+      can("analyst") ? ta : null, can("analyst") ? h("div", { class: "actions ex-actions" }, button("Add note", { need: "analyst", kind: "primary", size: "sm", onclick: guard(async () => {
         const r = await api(`/api/findings/${gid}/notes`, { method: "POST", body: { body: ta.value, occurrence_id: ctx.occurrence_id || null, verification_id: ctx.verification_id || null } });
         toast("Note added"); renderNotes(r.notes);
-      }) })),
+      }) })) : h("p", { class: "faint" }, "Read-only access. Analyst access is required to add or edit notes."),
       notes.length ? h("ol", { class: "sky-notes" }, notes.map((n) => {
         const edit = h("textarea", { rows: 3, maxlength: 8000, hidden: true, "aria-label": "Edit note" }); edit.value = n.body || "";
-        const save = button("Save revision", { size: "sm", kind: "primary", onclick: guard(async () => { const r = await api(`/api/findings/${gid}/notes/${n.id}`, { method: "PUT", body: { body: edit.value } }); toast("Revision saved"); renderNotes(r.notes); }) });
+        const save = button("Save revision", { need: "analyst", size: "sm", kind: "primary", onclick: guard(async () => { const r = await api(`/api/findings/${gid}/notes/${n.id}`, { method: "PUT", body: { body: edit.value } }); toast("Revision saved"); renderNotes(r.notes); }) });
         save.hidden = true;
         return h("li", { class: "sky-note" }, h("div", { class: "sky-row-head" }, h("strong", {}, n.created_by || "analyst"), h("span", { class: "faint" }, fmtDateSec(n.updated_at)),
           n.occurrence_id ? h("span", { class: "tag" }, `occurrence #${n.occurrence_id}`) : n.verification_id ? h("span", { class: "tag" }, `verification #${n.verification_id}`) : null,
           h("span", { class: "tag" }, "Analyst note — not machine evidence"),
-          button("Edit", { size: "sm", onclick: () => { edit.hidden = !edit.hidden; save.hidden = edit.hidden; } })),
+          button("Edit", { need: "analyst", size: "sm", onclick: () => { edit.hidden = !edit.hidden; save.hidden = edit.hidden; } })),
           h("div", { class: "sky-note-body" }, n.body == null ? h("span", { class: "faint" }, "Could not be decrypted") : n.body), edit, save,
           n.revisions.length > 1 ? h("details", { class: "sky-details" }, h("summary", {}, `Revision history · ${n.revisions.length}`),
             h("ol", { class: "sky-signals" }, n.revisions.map((r) => h("li", {}, h("span", { class: "faint" }, `${fmtDateSec(r.created_at)} · ${r.author} — `), r.body)))) : null);
@@ -451,7 +452,7 @@ async function viewWorkspace(gid, query) {
       h("a", { href: `#/findings/${gid}?occurrence=${o.id}` }, `${o.strix_id} · scan #${o.scan_id}`),
       h("div", { class: "faint mono" }, o.run_name), h("div", { class: "faint" }, `${fmtShort(o.observed_at)} · ${o.scan_trigger === "verify" ? "verification run" : "scan"}`),
       h("div", {}, chip(o.correlation.state === "analyst_confirmed" ? "completed" : o.correlation.state === "analyst_rejected" ? "failed" : "neutral", o.correlation.label)),
-      h("div", { class: "actions" }, ["confirmed", "rejected", "cleared"].map((d) => button(d === "confirmed" ? "Confirm match" : d === "rejected" ? "Reject match" : "Clear", { size: "sm", onclick: guard(async () => {
+      h("div", { class: "actions" }, ["confirmed", "rejected", "cleared"].map((d) => button(d === "confirmed" ? "Confirm match" : d === "rejected" ? "Reject match" : "Clear", { need: "analyst", size: "sm", onclick: guard(async () => {
         await api(`/api/findings/${gid}/occurrences/${o.id}/review`, { method: "POST", body: { decision: d } }); toast("Correlation review saved"); router();
       }) }))))),
     h("div", { class: "card-subtitle sky-gap" }, "Verification runs"),

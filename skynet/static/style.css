@@ -563,10 +563,10 @@ dl.dl.stacked dt:first-child { margin-top: 0; }
 .ex-diff .del { color: var(--danger); }
 .ex-missing { padding: 6px 0; }
 .ex-sides { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
-.ex-side { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.ex-side { min-width: 0; display: grid; grid-template-rows: subgrid; grid-row: span 4; gap: 8px; align-items: start; }
 .ex-side .field select { width: 100%; }
 .ex-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-@media (max-width: 1280px) { .ex-sides { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1280px) { .ex-sides { grid-template-columns: minmax(0, 1fr); } .ex-side { display: flex; flex-direction: column; } }
 .sky-notes { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .sky-note { border-top: 1px solid var(--border); padding-top: 12px; }
 .sky-note > * + * { margin-top: 8px; }

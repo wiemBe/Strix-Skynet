@@ -1,5 +1,22 @@
 # Claude'a devir — Skynet
 
+> **Güncel: aynı sunucuda Nginx/IP erişimi (16 Kasım).** [Kurulum](NGINX.md),
+> [191 test ve gerçek Nginx QA](qa/2026-11-16-nginx/README.md). Dry-run/--apply kurucu hazır.
+> Nginx IP:80/443 → Skynet 127.0.0.1:8787; HTTP/HTTPS ve CIDR allowlist. Asıl servis/taramalar restart edilmedi.
+> Kullanıcı `10.90.10.10` adresinin örnek olduğunu, test ortamını vereceğini söyledi. Gerçek RHEL host'a
+> kurulum yapıldığı iddia edilmesin; IP/SSH gelince systemd/firewalld/SELinux ve uzak browser kabulü yapılacak.
+
+> **Güncel (16 Kasım, düzeltme sonrası):** Kullanıcı/audit/rapor incelemesinin R1–R5 kusurları kapatıldı;
+> [düzeltme raporu](reviews/2026-11-16-users-audit-report-fixes.md). 9 yeni regresyonla 183 test geçti;
+> [32 görsel QA kanıtı](qa/2026-11-16-users-fixes/README.md). Control-only seçim ve kart hizası da düzeltildi.
+> Migration 7 hazır; asıl DB/anahtarda çalıştırılmadı. Eski fix zamanları uydurulmaz; eski yedekler yeniden
+> yazılmaz. Değişiklikler çalışma ağacında; commit/merge/push yok. Önceki PDF/RHEL kabul sınırları devam eder.
+
+> **Tarihsel bağımsız inceleme (16 Kasım, düzeltme öncesi):** `4f04aa2` kullanıcı/rol, audit ve yönetim raporu değişiklikleri
+> [incelendi](reviews/2026-11-16-users-audit-report-review.md). 174 test geçti; R1/P1, R2–R4/P2 ve
+> R5/P3 açık. [QA ve tekrar üretimler](qa/2026-11-16-users-review/README.md).
+> Uygulama kodu bu incelemede düzeltilmedi; yeni commit main'e birleştirilmedi/push edilmedi.
+
 > **Son görsel QA tekrarı:** [rapor ve ekranlar](qa/2026-11-15-visual-repeat/README.md).
 > Laptop sekmeleri, oturum metinleri, dialog alt eylemleri, Details taşması/hizası ve Mode etiketi düzeltildi.
 > İki viewport yeniden incelendi; son 38 ölçümde görsel taşma/kesilme ve konsol hatası yok. İş mantığı değişmedi.

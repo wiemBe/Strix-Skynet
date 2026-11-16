@@ -120,6 +120,9 @@ ssh -L 8787:127.0.0.1:8787 your-user@rhel-host
 ```
 
 Tarayıcıda `http://127.0.0.1:8787`. Kurumsal HTTPS proxy kullanırken `SKYNET_COOKIE_SECURE=1` ayarlayın.
+IP yazarak doğrudan ağdan erişim için **aynı sunucuya Nginx** kurulumu ve kurulum komutu:
+[NGINX.md](NGINX.md). Bu kurulum backend'i loopback'te tutar, gerçek IP ve istemci CIDR allowlist'iyle
+80/443 üzerinden proxy sağlar; `8787` firewall'a açılmaz. IP atanması veya gerçek RHEL erişimi bu repoda yapılmış sayılmaz.
 SELinux/firewalld kapatılmaz; proxy veya özel yol için AVC reddi varsa kurum politikasıyla çözün.
 Sistem genelinde TLS doğrulamasını veya kripto politikasını düşürmeyin. FIPS etkin kurulumda ayrıca kabul testi gerekir.
 
