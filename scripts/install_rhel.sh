@@ -35,6 +35,7 @@ if [ "$source_dir" != /opt/skynet ]; then
   install -d -m 0755 /opt/skynet/docs
   install -m 0644 "$source_dir/docs/RHEL.md" /opt/skynet/docs/RHEL.md
   install -m 0644 "$source_dir/docs/NGINX.md" /opt/skynet/docs/NGINX.md
+  install -m 0644 "$source_dir/docs/SYSLOG.md" /opt/skynet/docs/SYSLOG.md
 fi
 cd /opt/skynet
 if [ ! -x .venv/bin/python ]; then python3.12 -m venv .venv; fi

@@ -1257,7 +1257,7 @@ async function viewSettings() {
     app.replaceChildren(pageHead("Settings", { lead: "Your account. System settings, users and the audit log are managed by admins." }), accountSection({ wide: true }));
     return;
   }
-  const [st, profiles, users] = await Promise.all([api("/api/settings"), api("/api/llm-profiles"), api("/api/users")]);
+  const [st, profiles, users, siem] = await Promise.all([api("/api/settings"), api("/api/llm-profiles"), api("/api/users"), api("/api/syslog")]);
   const f = {
     strix_bin: h("input", { type: "text", value: st.strix_bin, class: "mono" }),
     strix_workdir: h("input", { type: "text", value: st.strix_workdir, class: "mono" }),
@@ -1328,6 +1328,7 @@ async function viewSettings() {
             : `Unavailable · ${(st.agent_messaging_status || {}).reason || "Unknown"} Scans run without messaging.`))]),
       formSection("Notification", "A JSON payload is sent to the webhook when a scan finishes.", [field("Webhook URL", f.webhook_url)]),
       h("div", { class: "form-actions" }, button("Save", { kind: "primary", type: "submit" })))),
+    syslogSettingsSection(siem),
     h("div", { class: "grid-2" },
       section("CI / pipeline access", h("div", { class: "card card-pad" },
         h("div", { class: "muted" }, "Use the X-API-Token header to start a scan from a pre-prod pipeline. The token is shown only when created."),
@@ -1344,6 +1345,69 @@ async function viewSettings() {
     usersSection(users));
   app.querySelectorAll("pre.ci").forEach((p) => { p.style.margin = "14px 0"; p.style.color = "var(--text-2)"; });
   app.querySelectorAll(".section > div > .note").forEach((n) => { n.style.marginTop = "10px"; });
+}
+
+function syslogSettingsSection(initial) {
+  const config = initial.settings;
+  const fields = {
+    enabled: h("input", { type: "checkbox", checked: config.enabled }),
+    host: h("input", { type: "text", value: config.host, placeholder: "siem.corp.example or 10.0.0.20", class: "mono" }),
+    port: h("input", { type: "number", min: 1, max: 65535, value: config.port }),
+    transport: select([["tls", "TLS"], ["tcp", "TCP"], ["udp", "UDP"]], config.transport),
+    facility: select(Array.from({ length: 24 }, (_, n) => [String(n), n >= 16 ? `local${n - 16} (${n})` : `Facility ${n}`]), String(config.facility)),
+    source_hostname: h("input", { type: "text", value: config.source_hostname, class: "mono" }),
+    ca_file: h("input", { type: "text", value: config.ca_file, placeholder: "Empty: system trust store", class: "mono" }),
+    server_name: h("input", { type: "text", value: config.server_name, placeholder: "Empty: collector address", class: "mono" }),
+    client_cert: h("input", { type: "text", value: config.client_cert, placeholder: "/var/lib/skynet-tls/client.crt", class: "mono" }),
+    client_key: h("input", { type: "text", value: config.client_key, placeholder: "/var/lib/skynet-tls/client.key", class: "mono" }),
+  };
+  const statusBox = h("div", { class: "syslog-status" }), resultBox = h("div", {});
+  const renderStatus = (data) => {
+    const s = data.status;
+    statusBox.replaceChildren(h("div", { class: "syslog-metrics" },
+      ...[["Pending", s.pending], ["Handed to transport", s.handed_off], ["Queue overflow", s.overflow], ["Superseded", s.superseded]].map(([label, value]) => h("div", {}, h("span", { class: "faint" }, label), h("strong", {}, value)))),
+      h("div", { class: "help" }, `${data.settings.enabled ? "Forwarding enabled" : "Forwarding disabled"} · Dispatcher ${s.worker_running ? "running" : "stopped"} · Last handoff: ${s.last_handoff_at ? fmtDateSec(s.last_handoff_at) : "Never"}`),
+      s.last_error ? alertBox("warn", "Forwarding retries pending", `${s.last_error}${s.last_error_at ? ` Last failed attempt: ${fmtDateSec(s.last_error_at)}.` : ""}`) : null,
+      h("div", { class: "help" }, `Counters are cumulative; last handoff refers to current settings. Pending limit ${s.pending_limit.toLocaleString()}. A handoff does not confirm SIEM ingestion. Retries may duplicate an event; deduplicate by event_id. Instance: ${data.instance_id}`));
+  };
+  const tls = h("details", { class: "syslog-tls" }, h("summary", {}, "TLS trust and optional client certificate"),
+    h("div", { class: "field-row two" }, field("CA bundle path", fields.ca_file, "Absolute path on the Skynet server. Certificate verification stays enabled."), field("TLS server name", fields.server_name)),
+    h("div", { class: "field-row two" }, field("Client certificate path", fields.client_cert), field("Client private key path", fields.client_key, "Optional mTLS: provide both files. Contents are never uploaded.")));
+  const sync = () => { tls.hidden = fields.transport.value !== "tls"; };
+  fields.transport.addEventListener("change", () => { if ([514, 6514].includes(+fields.port.value)) fields.port.value = fields.transport.value === "tls" ? "6514" : "514"; sync(); });
+  const payload = () => Object.fromEntries(Object.entries(fields).map(([k, f]) => [k, f.type === "checkbox" ? f.checked : ["port", "facility"].includes(k) ? +f.value : f.value]));
+  const save = button("Save syslog settings", { type: "submit", kind: "primary", need: "admin" });
+  const probe = button("Send test event", { need: "admin", onclick: guard(async () => {
+    const tested = payload();
+    const endpoint = `${tested.transport.toUpperCase()} · ${tested.host}:${tested.port}`;
+    probe.disabled = true;
+    resultBox.replaceChildren(h("div", { class: "help" }, "Testing transport…"));
+    try {
+      const r = await api("/api/syslog/test", { method: "POST", body: tested });
+      resultBox.replaceChildren(alertBox(r.ok ? "info" : "warn", r.ok ? "Test handed to transport" : "Test failed", `${endpoint} · ${r.message}`));
+    } catch (error) {
+      resultBox.replaceChildren(alertBox("warn", "Test failed", error.message || "Could not test syslog transport."));
+    } finally { probe.disabled = false; }
+  }) });
+  Object.values(fields).forEach((f) => {
+    f.addEventListener("input", () => resultBox.replaceChildren());
+    f.addEventListener("change", () => resultBox.replaceChildren());
+  });
+  const form = h("form", { class: "card card-pad form", onsubmit: (e) => { e.preventDefault(); guard(async () => {
+    save.disabled = true;
+    try { const r = await api("/api/syslog", { method: "PUT", body: payload() }); renderStatus(r); toast("Syslog settings saved"); }
+    finally { save.disabled = false; }
+  })(); } },
+    h("label", { class: "check" }, fields.enabled, "Forward new security audit events to SIEM"),
+    h("p", { class: "help" }, "RFC 5424 + JSON audit metadata. Includes sign-ins, denied actions, user/settings changes, scan operations and report access. Raw agent output, request bodies and credentials are not exported. UDP/TCP are unencrypted; TLS is recommended."),
+    h("div", { class: "field-row two" }, field("Collector address", fields.host), field("Collector port", fields.port)),
+    h("div", { class: "field-row two" }, field("Transport", fields.transport, "TCP/TLS use octet-counted framing."), field("Facility", fields.facility)),
+    field("Source hostname", fields.source_hostname, "An ASCII source label to identify this Skynet instance."), tls,
+    h("div", { class: "note" }, "Only new events are queued while enabled. Saving changed settings supersedes pending events; local audit records remain. A test uses the form values without enabling forwarding."),
+    h("div", { class: "form-actions" }, save, probe, button("Refresh delivery status", { need: "admin", onclick: guard(async () => { renderStatus(await api("/api/syslog")); }) })),
+    resultBox, statusBox);
+  sync(); renderStatus(initial);
+  return section("SIEM / Syslog", form);
 }
 
 function llmDialog(p) {

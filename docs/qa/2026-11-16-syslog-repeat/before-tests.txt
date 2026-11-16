@@ -1,0 +1,32 @@
+.....F.F.F........
+======================================================================
+FAIL: test_json_shaped_audit_summaries_remain_original_strings (test_siem.TestSIEM.test_json_shaped_audit_summaries_remain_original_strings)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/efe/Documents/Strix/tests/test_siem.py", line 64, in test_json_shaped_audit_summaries_remain_original_strings
+    self.assertEqual(payload(send.call_args.args[1])["summary"], value)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 123 != '123'
+
+======================================================================
+FAIL: test_pending_failure_remains_visible_after_another_event_succeeds (test_siem.TestSIEM.test_pending_failure_remains_visible_after_another_event_succeeds)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/efe/Documents/Strix/tests/test_siem.py", line 56, in test_pending_failure_remains_visible_after_another_event_succeeds
+    self.assertTrue(status["last_error"], "a later success must not hide an earlier pending retry")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '' is not true : a later success must not hide an earlier pending retry
+
+======================================================================
+FAIL: test_retry_delay_starts_after_the_slow_attempt_finishes (test_siem.TestSIEM.test_retry_delay_starts_after_the_slow_attempt_finishes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/efe/Documents/Strix/tests/test_siem.py", line 75, in test_retry_delay_starts_after_the_slow_attempt_finishes
+    self.assertEqual(row["next_attempt_at"], 107.0)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 102.0 != 107.0
+
+----------------------------------------------------------------------
+Ran 18 tests in 0.426s
+
+FAILED (failures=3)

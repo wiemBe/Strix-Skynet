@@ -1,0 +1,54 @@
+[
+  {
+    "view": "validation-fixed",
+    "height": 768,
+    "scrollWidth": 1366,
+    "testingTextStuck": false,
+    "width": 1366
+  },
+  {
+    "view": "validation-fixed",
+    "height": 1080,
+    "scrollWidth": 1920,
+    "testingTextStuck": false,
+    "width": 1920
+  },
+  {
+    "view": "probe-fixed",
+    "height": 768,
+    "scrollWidth": 1366,
+    "width": 1366
+  },
+  {
+    "view": "probe-fixed",
+    "height": 1080,
+    "scrollWidth": 1920,
+    "width": 1920
+  },
+  {
+    "view": "tls-error",
+    "height": 768,
+    "scrollWidth": 1366,
+    "width": 1366
+  },
+  {
+    "view": "tls-error",
+    "height": 1080,
+    "scrollWidth": 1920,
+    "width": 1920
+  },
+  {
+    "view": "viewer",
+    "width": 1366,
+    "height": 768,
+    "scrollWidth": 1366,
+    "syslogSectionVisible": false
+  },
+  {
+    "view": "viewer",
+    "width": 1920,
+    "height": 1080,
+    "scrollWidth": 1920,
+    "syslogSectionVisible": false
+  }
+]

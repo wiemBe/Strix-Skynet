@@ -1,0 +1,40 @@
+{
+  "checks": [
+    {
+      "view": "enabled-status",
+      "height": 768,
+      "scrollWidth": 1366,
+      "status": "Pending\n0\nHanded to transport\n1\nQueue overflow\n0\nSuperseded\n0\nForwarding enabled · Dispatcher running · Last handoff: Nov 16, 2026, 06:32:38 PM\nPending limit 10,000. A handoff does not confirm SIEM ingestion. Retries may duplicate an event; deduplicate by event_id. Instance: 81cafd848911421eb55091e41a1209a2",
+      "width": 1366
+    },
+    {
+      "view": "retrying",
+      "height": 768,
+      "scrollWidth": 1366,
+      "status": "Pending\n2\nHanded to transport\n1\nQueue overflow\n0\nSuperseded\n0\nForwarding enabled · Dispatcher running · Last handoff: Never\nForwarding is retrying\nCollector connection or send failed.\nPending limit 10,000. A handoff does not confirm SIEM ingestion. Retries may duplicate an event; deduplicate by event_id. Instance: 81cafd848911421eb55091e41a1209a2",
+      "width": 1366
+    },
+    {
+      "view": "retrying",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "width": 1920
+    },
+    {
+      "view": "viewer-settings",
+      "height": 768,
+      "scrollWidth": 1366,
+      "syslogSectionVisible": false,
+      "width": 1366
+    },
+    {
+      "view": "viewer-settings",
+      "height": 1080,
+      "scrollWidth": 1920,
+      "syslogSectionVisible": false,
+      "width": 1920
+    }
+  ],
+  "console": [],
+  "scope": "Isolated synthetic QA on localhost:8798 with a real loopback UDP receiver; no real SIEM or scan calls"
+}

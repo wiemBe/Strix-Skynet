@@ -1,0 +1,15 @@
+{
+  "receiver": "127.0.0.1 UDP",
+  "received_events": 2,
+  "actions": [
+    "syslog.probe",
+    "syslog.configure"
+  ],
+  "unique_event_ids": 2,
+  "all_schema_v1": true,
+  "forwarding_disabled_at_end": true,
+  "queue_states": {
+    "handed_off": 1,
+    "superseded": 2
+  }
+}

@@ -1,0 +1,24 @@
+.../opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/unittest/mock.py:806: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10ad11a80>
+  def __setattr__(self, name, value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/lib/python3.15/unittest/mock.py:806: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10adc8e40>
+  def __setattr__(self, name, value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+...../Users/efe/Documents/Strix/.venv/lib/python3.15/site-packages/starlette/exceptions.py:7: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10adc89e0>
+  class HTTPException(Exception):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/efe/Documents/Strix/.venv/lib/python3.15/site-packages/starlette/exceptions.py:7: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10adc8ba0>
+  class HTTPException(Exception):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/efe/Documents/Strix/.venv/lib/python3.15/site-packages/starlette/exceptions.py:7: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10adc8900>
+  class HTTPException(Exception):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/Users/efe/Documents/Strix/.venv/lib/python3.15/site-packages/starlette/exceptions.py:7: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10adc9b60>
+  class HTTPException(Exception):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+..............................................................................2026-11-16 18:36:57,639 WARNING skynet.control: ignoring control file with unsafe permissions: scan_11_control.json
+........................................................................................................................
+----------------------------------------------------------------------
+Ran 206 tests in 14.112s
+
+OK

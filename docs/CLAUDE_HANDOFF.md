@@ -1,5 +1,18 @@
 # Claude'a devir — Skynet
 
+> **Güncel: Syslog tekrar QA (16 Kasım).** [Düzeltmeler ve kanıtlar](qa/2026-11-16-syslog-repeat/README.md).
+> Dört kusur kapatıldı: pending hata görünürlüğü, JSON'a benzeyen literal audit özetleri, yavaş girişim sonrası retry
+> aralığı ve validation hatasında takılı kalan probe görünümü. Altı yeni regresyon; 212 tam test / 21 UBI syslog testi OK.
+> Ayrı süreç restart'ında aynı event_id ile gerçek yerel TCP teslimi doğrulandı; iki viewport yeniden incelendi.
+> Gerçek yerel servis güncel kodla açıldı; forwarding kapalı/collector boş. Yeni migration/pentest/commit/push yok.
+
+> **Önceki aşama: SIEM / Syslog (16 Kasım).** [Rehber](SYSLOG.md), [QA](qa/2026-11-16-syslog/README.md).
+> RFC 5424 JSON audit export, UDP/TCP/TLS/mTLS, durable outbox, retry, event_id dedupe ve Admin Settings eklendi.
+> 206 macOS / 15 UBI syslog testi geçti; iki viewport QA yapıldı. Yerel uygulama yedekli migration 8 ile açıldı;
+> forwarding kapalı/collector boş, yeni tarama yok. Gerçek SIEM'e alım onayı yok. Kod commit/push edilmedi.
+> Handoff'u ingestion diye sunmayın; ayar değişimi pending olayları superseded yapar, eski hedef kuyruğunu yeni
+> hedefe taşımayın. Raw Strix çıktısı ve request body export edilmez.
+
 > **Main entegrasyonu (16 Kasım):** `4f04aa2` Claude özellikleri ve `00275fc` düzeltme/Nginx commit'i
 > main'e fast-forward alındı; 191 test geçti. Geçmiş korunuyor, branch'ler silinmedi. Alttaki “commit/merge/push yok”
 > notları önceki QA aşamalarının kaydıdır. Gerçek RHEL host kurulumu ve uzak istemci kabulü hâlâ bekliyor.

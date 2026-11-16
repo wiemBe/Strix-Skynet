@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
 from . import (activity, audit, auth, browser, campaigns, compare, control, coverage_matrix, crypto, db, findings_store, inventory,
-               llm, report, runner, runs, scheduler, session_health, targets, telemetry, timeline, vault, verify, workspace)
+               llm, report, runner, runs, scheduler, session_health, siem, targets, telemetry, timeline, vault, verify, workspace)
 from .config import COOKIE_SECURE, LOG_DIR, SESSION_HOURS, STATIC_DIR, TIMEZONE, USER_STRIX_CONFIG
 
 
@@ -57,7 +57,11 @@ async def lifespan(_: FastAPI):
     threading.Thread(target=runner.strix_version, args=(db.get_settings()["strix_bin"],), daemon=True).start()
     runner.start_worker()
     scheduler.start()
-    yield
+    siem.start()
+    try:
+        yield
+    finally:
+        siem.stop()
 
 
 app = FastAPI(title="Skynet", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -943,6 +947,31 @@ def import_runs() -> dict[str, int]:
 
 
 # ---------------------------------------------------------------- settings
+@app.get("/api/syslog")
+def syslog_get() -> dict[str, Any]:
+    return siem.public()
+
+
+@app.put("/api/syslog")
+def syslog_put(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    try:
+        result = siem.save(body)
+    except ValueError as exc:
+        bad(str(exc))
+    _audit_note(request, summary="SIEM syslog forwarding " + ("enabled" if result["settings"]["enabled"] else "disabled"))
+    return result
+
+
+@app.post("/api/syslog/test")
+def syslog_test(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    try:
+        result = siem.test(body)
+    except ValueError as exc:
+        bad(str(exc))
+    _audit_note(request, summary="Test transport handoff " + ("succeeded" if result["ok"] else "failed"))
+    return result
+
+
 SETTINGS_KEYS = ("strix_bin", "strix_workdir", "max_concurrent", "default_scan_mode", "telemetry", "webhook_url",
                  "agent_messaging")
 

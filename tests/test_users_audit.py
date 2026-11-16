@@ -479,7 +479,7 @@ class TestReviewRegressions(Base):
                     tid = db.insert("targets", {"name": "Legacy fixture", "base_url": "http://127.0.0.1:8899"})
                     gid = db.insert("finding_groups", {"target_id": tid, "fingerprint": _uniq("legacy"), "remediation": "fixed", "remediation_at": "2026-01-02"})
                     db.migrate()
-                    migration = db.migrations_applied()[-1]
+                    migration = next(m for m in db.migrations_applied() if m["version"] == 7)
                     self.assertEqual(migration["version"], 7)
                     self.assertEqual(db.get("audit_log", aid)["summary"], "••••••")
                     self.assertEqual(db.get("audit_log", aid)["at"], "2026-01-01")

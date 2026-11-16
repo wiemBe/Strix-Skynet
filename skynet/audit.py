@@ -35,6 +35,9 @@ RULES: list[Rule] = [
     _r("GET", "/api/settings", "admin", "settings.read", audit=False),
     _r("GET", "/api/users", "admin", "user.list", audit=False),
     _r("GET", "/api/audit", "admin", "audit.read", audit=False),
+    _r("GET", "/api/syslog", "admin", "syslog.read", audit=False),
+    _r("PUT", "/api/syslog", "admin", "syslog.configure"),
+    _r("POST", "/api/syslog/test", "admin", "syslog.test"),
     # ---- public / every signed-in user (login is audited by its handler, with the outcome)
     _r("POST", "/api/login", "viewer", "auth.login", audit=False),
     _r("POST", "/api/logout", "viewer", "auth.logout"),
@@ -109,6 +112,7 @@ ACTION_LABELS = {
     "settings.update": "Changed settings", "ci_token.rotate": "Rotated CI token",
     "user.create": "Created user", "user.update": "Changed user", "user.password_reset": "Reset user password",
     "user.delete": "Deleted user", "report.view": "Opened management report",
+    "syslog.configure": "Changed SIEM syslog settings", "syslog.test": "Tested SIEM syslog transport",
 }
 
 MUTATING = ("POST", "PUT", "PATCH", "DELETE")
@@ -174,10 +178,13 @@ def entries(actor: str = "", action: str = "", q: str = "", before: int | None =
     if before:
         where.append("id<?"); args.append(before)
     limit = max(1, min(int(limit), 500))
-    sql = "SELECT * FROM audit_log" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY id DESC LIMIT ?"
+    # db.q decodes fields named summary as scan JSON. Audit summaries are literal
+    # text, even if a target was named "123", "null" or '{"ticket":42}'.
+    sql = "SELECT *,summary AS audit_summary FROM audit_log" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY id DESC LIMIT ?"
     rows = db.q(sql, (*args, limit + 1))
     red = vault.stored_redactor()
     for r in rows:
+        r["summary"] = r.pop("audit_summary")
         for key in ("actor", "summary", "path", "ip", "object_id"):
             r[key] = red.text(r.get(key), strict=True)
         r["action_label"] = ACTION_LABELS.get(r["action"], r["action"])

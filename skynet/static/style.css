@@ -566,6 +566,15 @@ dl.dl.stacked dt:first-child { margin-top: 0; }
 .ex-side { min-width: 0; display: grid; grid-template-rows: subgrid; grid-row: span 4; gap: 8px; align-items: start; }
 .ex-side .field select { width: 100%; }
 .ex-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.syslog-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.syslog-metrics > div { display: flex; flex-direction: column; gap: 4px; }
+.syslog-metrics strong { font-size: 22px; font-variant-numeric: tabular-nums; }
+.syslog-status { border-top: 1px solid var(--border); padding-top: 20px; }
+.syslog-status > * + * { margin-top: 12px; }
+.syslog-status .help { overflow-wrap: anywhere; }
+.syslog-tls summary { cursor: pointer; color: var(--text-2); margin-bottom: 16px; }
+.syslog-tls > .field-row + .field-row { margin-top: 16px; }
+@media (max-width: 700px) { .syslog-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 1280px) { .ex-sides { grid-template-columns: minmax(0, 1fr); } .ex-side { display: flex; flex-direction: column; } }
 .sky-notes { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .sky-note { border-top: 1px solid var(--border); padding-top: 12px; }

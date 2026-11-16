@@ -1,0 +1,8 @@
+{
+  "first_process_failure_persisted": true,
+  "second_process_handoff_received": true,
+  "stable_event_id": true,
+  "received_count": 1,
+  "attempts": 2,
+  "scope": "Disposable DB/key; only 127.0.0.1 TCP; retry due time advanced for this test"
+}

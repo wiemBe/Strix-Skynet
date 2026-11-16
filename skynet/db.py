@@ -427,6 +427,20 @@ UPDATE users SET session_version=1 WHERE active=0;
 ALTER TABLE finding_groups ADD COLUMN fixed_at TEXT;
 """
 
+MIGRATION_8 = """
+CREATE TABLE syslog_config (
+    id INTEGER PRIMARY KEY CHECK(id=1), enabled INTEGER NOT NULL DEFAULT 0,
+    generation INTEGER NOT NULL DEFAULT 0, instance_id TEXT NOT NULL, settings TEXT NOT NULL DEFAULT '{}'
+);
+CREATE TABLE syslog_outbox (
+    audit_id INTEGER PRIMARY KEY REFERENCES audit_log(id), generation INTEGER NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('pending','handed_off','superseded','overflow')),
+    attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at REAL NOT NULL DEFAULT 0,
+    last_attempt_at TEXT, transport_handoff_at TEXT, last_error TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX idx_syslog_pending ON syslog_outbox(state,next_attempt_at,audit_id);
+"""
+
 
 MIGRATIONS: list[tuple[int, str, str]] = [
     (1, "campaigns, auth profiles, finding correlation, inventory, telemetry", MIGRATION_1),
@@ -436,6 +450,7 @@ MIGRATIONS: list[tuple[int, str, str]] = [
     (5, "analyst notes, evidence labels, correlation reviews, per-scan credential bindings", MIGRATION_5),
     (6, "user accounts with roles, audit log", MIGRATION_6),
     (7, "revoke disabled sessions, stable fixed transition time, sanitize audit metadata", MIGRATION_7),
+    (8, "SIEM syslog configuration and durable audit outbox", MIGRATION_8),
 ]
 
 
@@ -546,7 +561,21 @@ def _repair_audit_metadata(c: sqlite3.Connection) -> None:
     # fixed transition can be inferred. Existing fixed_at deliberately stays NULL.
 
 
-DATA_MIGRATIONS = {1: _migrate_inline_target_auth, 6: _migrate_admin_account, 7: _repair_audit_metadata}
+def _migrate_syslog(c: sqlite3.Connection) -> None:
+    import uuid
+    c.execute("INSERT INTO syslog_config(id,instance_id) VALUES(1,?)", (uuid.uuid4().hex,))
+    # A trigger makes audit + outbox insertion one SQLite transaction, without
+    # networking in a request or replaying any pre-enable history.
+    c.execute("""CREATE TRIGGER audit_syslog_enqueue AFTER INSERT ON audit_log
+        WHEN (SELECT enabled FROM syslog_config WHERE id=1)=1
+        BEGIN
+            INSERT INTO syslog_outbox(audit_id,generation,state)
+            SELECT NEW.id,generation,CASE WHEN (SELECT COUNT(*) FROM syslog_outbox WHERE state='pending')<10000
+            THEN 'pending' ELSE 'overflow' END FROM syslog_config WHERE id=1;
+        END""")
+
+
+DATA_MIGRATIONS = {1: _migrate_inline_target_auth, 6: _migrate_admin_account, 7: _repair_audit_metadata, 8: _migrate_syslog}
 
 
 def q(sql: str, args: Iterable[Any] = ()) -> list[dict[str, Any]]:

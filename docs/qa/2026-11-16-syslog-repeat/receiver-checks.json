@@ -1,0 +1,11 @@
+{
+  "received_count": 3,
+  "probe_count": 1,
+  "queued_audit_count": 2,
+  "event_ids_present": true,
+  "forwarding_disabled_after_qa": true,
+  "outbox_states": {
+    "handed_off": 2
+  },
+  "scope": "Disposable fixture only; UDP receiver bound to 127.0.0.1"
+}

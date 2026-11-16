@@ -123,6 +123,14 @@ Admin, Settings > Users bölümünden ek hesap açar. Üç rol vardır:
   Önce tutarlı SQLite yedeği alınır; mevcut anahtar değiştirilmez. Önceki yedekler yeniden yazılmaz ve düzeltme öncesi
   metadata içerebilir. Sonradan öğrenilen sırlar audit okunurken de maskelenir.
 
+## SIEM / Syslog
+
+Admin, **Settings → SIEM / Syslog** bölümünden UDP/TCP/TLS collector'ını tanımlayabilir; isteğe bağlı mTLS
+sertifika yolları desteklenir. RFC 5424 + JSON audit metadata'sı, kalıcı outbox ve artan retry ile gönderilir.
+Test olayı ve pending/handoff/overflow/hata durumu görünür. Varsayılan kapalıdır; eski audit geçmişi topluca
+gönderilmez. Handoff SIEM ingestion onayı değildir; `event_id` ile deduplication gerekir.
+[Kurulum, alanlar ve teslim sınırları](docs/SYSLOG.md).
+
 ## Yönetim raporu
 
 Hedef veya kampanya sayfasındaki **Report** düğmesi bir özet açar (her rol görebilir): açık bulgular (önem
