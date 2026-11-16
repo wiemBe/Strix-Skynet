@@ -41,7 +41,10 @@ class Run:
 
     def __del__(self):
         if getattr(self, "c", None):
-            self.c.close()
+            try:
+                self.c.close()
+            except sqlite3.ProgrammingError:   # collected on another thread (ASGI tests); the OS reclaims it
+                pass
 
     def __init__(self, root: Path, name: str | None = None):
         Run.n += 1

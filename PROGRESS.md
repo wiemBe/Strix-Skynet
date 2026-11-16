@@ -410,3 +410,51 @@ Kaynak: [docs/FEATURE_BACKLOG.md](docs/FEATURE_BACKLOG.md). Önce güncel kod, t
 - [ ] Ekran görüntülerini göstermek için görsel maskeleme veya kullanıcının açıkça kabul ettiği bir erişim politikası yok.
 - Sürüm/build/commit alanı eklenmedi (kaynak yok). WSTG eşlemesi ve yeniden yazma tespiti sezgiseldir.
 - Production'a alma ve asıl kurulumda migration 5 yapılmadı.
+
+
+## Çoklu kullanıcı, roller, denetim kaydı ve yönetim raporu — uygulandı (Claude, 16 Kasım 2026)
+
+**Kapsam:** Kullanıcının seçtiği iki özellik: (7) kullanıcılar/roller/audit log, (8) yönetim raporu (PDF).
+
+- **Migration 6** (`users`, `audit_log`): mevcut `settings.admin_password_hash` yerleşik admin satırına taşınır, ayar
+  silinir. Gerçek `data/skynet.db` bu oturumda v6'ya taşındı; yedek `data/backups/skynet-pre-v6-*.db`.
+- **Roller** viewer / analyst / admin. `skynet/audit.py` `RULES` tek politika tablosu: middleware her istekte rolü
+  denetler, listede olmayan değiştirici rota admin'e düşer. Oturum çerezi kullanıcı kimliği + şifre parmak izi taşır;
+  rol/etkinlik her istekte DB'den okunur. Yerleşik `SKYNET_USER` hesabı arayüzden değiştirilemez; son admin korunur.
+- Notlar, etiketler, korelasyon incelemeleri ve ajan mesajlarının yazarı artık oturumdaki kullanıcı (önceden sabit `admin`).
+- **Audit log:** her değiştirici API çağrısı middleware'de yazılır (gövde asla); işleyiciler sır içermeyen özet ekler.
+  Giriş/başarısız giriş, zamanlayıcı (`scheduler`) ve CI token (`ci-token`) aktörleri, rapor görüntüleme kaydedilir.
+- **Arayüz:** kenar çubuğunda kullanıcı + rol, admin için "Audit log" sayfası (kullanıcı/eylem/arama filtresi, sayfalama),
+  Settings > Users (ekle, rol, şifre sıfırla, devre dışı bırak, sil) ve "Your account". Yetkisiz düğmeler gizlenir
+  (`LABEL_NEEDS`); 403 yanıtı kullanıcıya gereken rolü söyler.
+- **Rapor:** `skynet/report.py` + `#/targets/{id}/report`, `#/campaigns/{id}/report`. Kullanıcı kararıyla PDF tarayıcıda
+  "Save as PDF" ile üretilir (yeni bağımlılık yok). SLA verisi olmadığı için "son tarihe uyum" yerine açık kalma
+  süresi ve düzeltme süresi gösterilir; eksik taramalar eğilimde işaretlidir.
+- **Düzeltilen yan hata:** `app.js` ile `sky.js` aynı global adı (`ROLE_TR`) tanımlayınca `sky.js` yüklenmiyordu; ad
+  değiştirildi ve iki dosyada ortak üst düzey ad kalmadığı kontrol edildi.
+
+### Testler ve doğrulama
+
+- `.venv/bin/python -m unittest discover -s tests` → **174/174** (23 yeni, `tests/test_users_audit.py`): her değiştirici
+  rotanın açık kuralı olması, viewer'ın tüm değiştirici rotalarda / analyst'in admin rotalarında 403 alması, oturum
+  iptali (şifre sıfırlama, devre dışı bırakma), rol değişikliğinin açık oturuma uygulanması, audit içeriği (gövde yok),
+  CI token aktörü, migration 6 veri taşıması, rapor içeriği/maskeleme/viewer erişimi, kayıtlı tüm zaman biçimlerinin
+  (Strix ISO+offset, `... UTC`, saat dilimsiz) rapor yaşı hesabında okunması.
+- Tarayıcı: Users ve Audit log 1366×768 ve 1920×1080'de (admin); viewer görünümü yalnız 1366×768'de (nav, gizli
+  düğmeler, Settings yalnız hesap, 403 mesajı) geçici `qa-analyst`/`qa-viewer` hesaplarıyla. Hesaplar QA sonunda
+  silindi; audit kayıtları (eklemeli) duruyor. Son yüklemede `sky.js` yüklü, Timeline sekmesi çalışıyor.
+- Rapor görsel kontrolü **QA fikstürüyle** yapıldı (geçici veri klasörü, 8793 portu; gerçek `data/`'ya veri eklenmedi);
+  yazdırma düzeni `@media print` kuralları ekranda etkinleştirilip 186 mm genişlikte ölçüldü: hedef raporu 14 bulgulu,
+  uzun başlıklı fikstürde 262 mm (A4 yazdırılabilir ~273 mm) → tek sayfa; kampanya raporu 2 hedefle 289 mm → hedef
+  tablosu büyüdükçe 2. sayfaya taşar (bölümler bölünmez). Açık bulgu listesi en önemli 6 ile sınırlı, kalanı sayıyla
+  belirtilir. Gerçek veride rapor boş durumlarıyla açıldı. Gerçek yazdırma penceresi/PDF dosyası otomasyonla üretilmedi.
+
+### Kalanlar
+
+- [ ] Kapsam (coverage) hücre çipleri gerçek trafik içeren bir çalışmayla görsel olarak denenmedi (fikstürde hücre yok).
+- [ ] "Download PDF" ile gerçek bir PDF kullanıcı tarafından bir kez üretilip kontrol edilmeli.
+- Rol ayrımı bir tasarım kararıdır: analyst hedef/zamanlama/kampanya düzenleyebilir; viewer talimat geçmişini ve
+  kanıtı okuyabilir. İstenirse `audit.RULES` tek yerden değiştirilir.
+- [ ] Audit log için saklama/temizleme politikası yok (eklemeli, sınırsız büyür).
+- [ ] Yeniden kullanıcı adı değiştirme, SSO/LDAP ve MFA yok. SLA (son tarih) özelliği seçilmedi.
+- Commit yapılmadı.

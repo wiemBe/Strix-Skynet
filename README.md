@@ -46,9 +46,44 @@ Strix ilk taramada Docker ile çeker. Resmi wheel'ler Linux x86_64 ve macOS Appl
 kurucu işletim sistemi/mimariye göre seçer. Diğer platformlarda ayrı bir Strix kurulumu gerekir. Yeni kurulumda Settings'teki Strix yolu varsayılan olarak bu paketlenmiş motordur;
 var olan kurulumların ayarı değişmez. Yeniden kurmak için: `scripts/setup_strix.sh --force`.
 
-**Giriş:** `.env` içinde `SKYNET_PASSWORD` boşsa ilk açılışta rastgele bir şifre üretilir ve
-`data/admin_password.txt` dosyasına (0600) yazılır. Kullanıcı adı varsayılan olarak `admin`'dir. Şifre
-Settings > Admin password bölümünden değiştirilebilir.
+**Giriş:** `SKYNET_USER` (varsayılan `admin`) yerleşik yönetici hesabıdır; her zaman etkin bir admin'dir ve arayüzden
+düzenlenemez/silinemez. `.env` içinde `SKYNET_PASSWORD` boşsa ilk açılışta rastgele bir şifre üretilir ve
+`data/admin_password.txt` dosyasına (0600) yazılır; şifre Settings > Your account bölümünden değiştirilebilir.
+`SKYNET_PASSWORD` doluysa şifre ortamdan gelir ve arayüzden değiştirilemez.
+
+## Kullanıcılar, roller ve denetim kaydı
+
+Admin, Settings > Users bölümünden ek hesap açar. Üç rol vardır:
+
+| Rol | Yetki |
+|---|---|
+| Viewer | Salt okuma: taramalar, bulgular, envanter, raporlar |
+| Analyst | Viewer + tarama başlatma/durdurma/sürdürme, ajana talimat, bulgu doğrulama ve durum/not/etiket, hedef/zamanlama/kampanya oluşturma ve düzenleme |
+| Admin | Analyst + ayarlar, LLM bağlantıları, kimlik profilleri (sırlar), silme işlemleri, kullanıcılar, denetim kaydı, CI token |
+
+- Yetki sunucuda tek bir tablodan uygulanır (`skynet/audit.py` `RULES`). Listede olmayan değiştirici bir uç nokta
+  varsayılan olarak yalnız admin'e açıktır; arayüzde yetkisiz düğmeler gizlenir ama asıl kontrol sunucudadır.
+- Rol ve hesap durumu her istekte veritabanından okunur: rol değişikliği mevcut oturuma hemen uygulanır; devre dışı
+  bırakma, şifre sıfırlama veya şifre değişikliği kullanıcının açık oturumlarını sonlandırır.
+- Son etkin admin kaldırılamaz; kimse kendi rolünü düşüremez, kendini devre dışı bırakamaz veya silemez.
+- **Audit log** (yalnız admin): giriş/çıkış ve başarısız girişler (yalnız var olan kullanıcı adları kaydedilir), her
+  değiştirici API çağrısı (kim, ne, hangi nesne, sonuç, IP), reddedilen denemeler (403), zamanlayıcı ve CI token ile
+  başlatılan taramalar, rapor görüntülemeleri. İstek gövdesi asla saklanmaz (sırlar, şifreler, talimat metni);
+  yalnız sır içermeyen kısa özetler (ör. bulgu durumu `open → fixed`). Kayıt eklemeli tutulur; arayüzde silme yoktur.
+- Mevcut kurulumlar migration 6 ile taşınır: üretilmiş admin şifresi kullanıcı tablosuna aktarılır (öncesinde yedek alınır).
+
+## Yönetim raporu
+
+Hedef veya kampanya sayfasındaki **Report** düğmesi bir özet açar (her rol görebilir): açık bulgular (önem
+derecesine göre), tarama başına bulgu eğilimi, açık bulguların yaşı ve düzeltme süresi, test kapsamı, en önemli 6 açık
+bulgu. Hedef raporu tek A4 sayfaya sığacak şekilde düzenlenmiştir; kampanya raporu hedef sayısı arttıkça 2. sayfaya taşar. **Download PDF** tarayıcının yazdırma penceresini açar; "PDF olarak kaydet" seçilir (A4, açık tema;
+ek Python bağımlılığı yoktur, Türkçe karakterler korunur).
+
+- Skynet'te düzeltme son tarihi (SLA) olmadığı için "son tarihe uyum" gösterilmez; yerine açık kalma süresi ve
+  "ilk görülme → fixed işaretlenme" süresi gösterilir.
+- İptal edilen, başarısız veya yarıda kalan taramalar eğilimde "incomplete" olarak işaretlenir; düşük sayıları
+  iyileşme sayılmaz. Doğrulama çalışmaları eğilime girmez. Kapsam, adı verilen tek bir tamamlanmış taramadan gelir.
+- Bulgu metinleri diğer bulgu yanıtları gibi vault maskelemesinden geçer.
 
 **İlk açılış:** `~/.strix/cli-config.json` içinde OpenRouter ayarı varsa otomatik olarak şifreli bir
 "OpenRouter" LLM profiline dönüştürülür. Daha önce Strix TUI ile yapılmış taramalar `strix_runs/` klasöründen
@@ -204,7 +239,9 @@ skynet/
   verify.py        Bulgu doğrulama çalışmaları ve muhafazakâr kanıt sınıflandırması
   control.py       Canlı ajana mesaj: başlatıcı seçimi, yerel kontrol ucu, şifreli denetim kaydı, durumlar
   strix_bridge.py  Strix runtime'ında çalışan ince başlatıcı (resmi CLI + mesaj kanalı; yalnızca stdlib import)
-  auth.py          Giriş, oturum çerezi, CI token
+  auth.py          Kullanıcı hesapları ve roller, giriş, oturum çerezi, CI token
+  audit.py         Uç nokta → gereken rol tablosu ve eklemeli denetim kaydı
+  report.py        Hedef/kampanya yönetim raporu verisi (yazdırılabilir sayfa)
   crypto.py        Gizli değerlerin şifrelenmesi (anahtar veri klasörü dışında; vault alt anahtarı)
   db.py            SQLite şeması ve numaralı taşımalar
   static/          Bağımlılıksız arayüz (harici CDN yok; kurum içi ağda çalışır)

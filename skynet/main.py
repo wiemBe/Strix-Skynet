@@ -15,8 +15,8 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from markdown_it import MarkdownIt
 
-from . import (activity, auth, browser, campaigns, compare, control, coverage_matrix, crypto, db, findings_store, inventory,
-               llm, runner, runs, scheduler, session_health, targets, telemetry, timeline, vault, verify, workspace)
+from . import (activity, audit, auth, browser, campaigns, compare, control, coverage_matrix, crypto, db, findings_store, inventory,
+               llm, report, runner, runs, scheduler, session_health, targets, telemetry, timeline, vault, verify, workspace)
 from .config import COOKIE_SECURE, LOG_DIR, SESSION_HOURS, STATIC_DIR, TIMEZONE, USER_STRIX_CONFIG
 
 
@@ -65,21 +65,52 @@ app = FastAPI(title="Skynet", lifespan=lifespan, docs_url=None, redoc_url=None, 
 PUBLIC = {"/login", "/api/login", "/static/style.css", "/static/login.js", "/static/favicon.png", "/static/apple-touch-icon.png"}
 
 
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "?"
+
+
+def _audit_request(request: Request, rule: audit.Rule, ids: list[str], actor: dict[str, Any], status: int) -> None:
+    """One audit row per state-changing call: who, what, which object, outcome. Never the request body."""
+    extra = request.scope.get("skynet.audit") or {}
+    try:
+        audit.record(actor["name"], extra.get("action") or rule.action, actor_id=actor.get("id"),
+                     actor_role=actor.get("role", ""), object_type=extra.get("object_type") or rule.object_type,
+                     object_id=extra.get("object_id") or (ids[0] if ids else ""), summary=extra.get("summary", ""),
+                     method=request.method, path=request.url.path, status=status, ip=_client_ip(request))
+    except Exception:  # noqa: BLE001 - auditing must never turn a completed action into a 500
+        log.exception("audit write failed")
+
+
 @app.middleware("http")
 async def security(request: Request, call_next):
     path = request.url.path
+    rule, ids = audit.rule_for(request.method, path)
+    actor: dict[str, Any] | None = None
     if path.startswith("/api/ci/"):
         if not auth.valid_api_token(request.headers.get("x-api-token", "")):
             return JSONResponse({"detail": "Invalid API token"}, status_code=401)
+        actor = {"name": "ci-token", "role": "ci"}
     elif path not in PUBLIC:
-        if not auth.valid_session(request.cookies.get(auth.COOKIE)):
+        user = auth.valid_session(request.cookies.get(auth.COOKIE))
+        if not user:
             if path.startswith("/api/"):
                 return JSONResponse({"detail": "Sign-in required"}, status_code=401)
             return RedirectResponse("/login", status_code=302)
         # CSRF: state-changing API calls must come from our own JS (custom header + SameSite=Strict cookie).
         if request.method not in ("GET", "HEAD") and request.headers.get("x-requested-with") != "skynet":
             return JSONResponse({"detail": "CSRF protection: invalid request"}, status_code=403)
+        request.scope["skynet.user"] = user
+        actor = {"name": user["username"], "id": user["id"], "role": user["role"]}
+        if path.startswith("/api/") and not audit.allowed(user["role"], rule.role):
+            if request.method in audit.MUTATING:
+                _audit_request(request, rule, ids, actor, 403)
+            need = auth.ROLE_LABELS[rule.role]
+            return JSONResponse({"detail": f"Your role ({auth.ROLE_LABELS.get(user['role'], user['role'])}) can't do this; "
+                                           f"it needs {need} access.", "need_role": rule.role}, status_code=403)
+    request.scope["skynet.audit"] = {}
     resp = await call_next(request)
+    if actor and rule.audit and request.method in audit.MUTATING and path.startswith("/api/"):
+        _audit_request(request, rule, ids, actor, resp.status_code)
     resp.headers["Content-Security-Policy"] = ("default-src 'self'; img-src 'self' data:; style-src 'self'; "
                                                "script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
     resp.headers["X-Content-Type-Options"] = "nosniff"
@@ -172,17 +203,37 @@ def login_page() -> FileResponse:
     return FileResponse(STATIC_DIR / "login.html")
 
 
+def _user(request: Request) -> dict[str, Any]:
+    """The signed-in user the security middleware resolved for this request."""
+    return request.scope.get("skynet.user") or bad("Sign-in required", 401)
+
+
+def _audit_note(request: Request, **kw: Any) -> None:
+    """Add secret-free detail (summary / object) to the audit row the middleware writes for this request."""
+    request.scope.setdefault("skynet.audit", {}).update({k: v for k, v in kw.items() if v not in (None, "")})
+
+
 @app.post("/api/login")
 def login(request: Request, body: dict[str, Any] = Body(...)) -> Response:
-    ip = request.client.host if request.client else "?"
+    ip = _client_ip(request)
     if auth.throttled(ip):
         bad("Too many failed attempts. Try again in 5 minutes.", 429)
-    if not auth.check_credentials(str(body.get("username", "")), str(body.get("password", ""))):
+    name = str(body.get("username", ""))
+    user = auth.check_credentials(name, str(body.get("password", "")))
+    if not user:
         auth.record_failure(ip)
+        known = auth.find_user(name) if name.strip() else None
+        # Only an existing account name is logged: people sometimes type a password into the username field.
+        audit.record(known["username"] if known else "unknown user", "auth.login_failed", actor_id=(known or {}).get("id"),
+                     summary="Account disabled" if known and not known["active"] else "", method="POST",
+                     path="/api/login", status=401, ip=ip)
         bad("Incorrect username or password.", 401)
     auth.clear_failures(ip)
+    auth.touch_login(user["id"])
+    audit.record(user["username"], "auth.login", actor_id=user["id"], actor_role=user["role"], method="POST",
+                 path="/api/login", status=200, ip=ip)
     resp = JSONResponse({"ok": True})
-    resp.set_cookie(auth.COOKIE, auth.make_session(), max_age=SESSION_HOURS * 3600, httponly=True,
+    resp.set_cookie(auth.COOKIE, auth.make_session(user), max_age=SESSION_HOURS * 3600, httponly=True,
                     samesite="strict", secure=COOKIE_SECURE, path="/")
     return resp
 
@@ -194,13 +245,76 @@ def logout() -> Response:
     return resp
 
 
+@app.get("/api/me")
+def me(request: Request) -> dict[str, Any]:
+    return {**auth.public(_user(request)), "timezone": TIMEZONE}
+
+
 @app.post("/api/settings/password")
-def change_password(body: dict[str, Any] = Body(...)) -> dict[str, bool]:
+def change_password(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, bool]:
     try:
-        auth.change_password(str(body.get("current", "")), str(body.get("new", "")))
+        auth.change_password(_user(request), str(body.get("current", "")), str(body.get("new", "")))
     except ValueError as e:
         bad(str(e))
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- users (admin)
+@app.get("/api/users")
+def users_list() -> list[dict[str, Any]]:
+    return auth.list_users()
+
+
+def _users_call(fn, *args, **kw):
+    try:
+        return fn(*args, **kw)
+    except LookupError as e:
+        bad(str(e), 404)
+    except ValueError as e:
+        bad(str(e))
+
+
+@app.post("/api/users")
+def users_create(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    u = _users_call(auth.create_user, str(body.get("username") or ""), str(body.get("role") or ""),
+                    str(body.get("password") or ""), str(body.get("display_name") or ""))
+    _audit_note(request, object_id=u["id"], summary=f"{u['username']} as {auth.ROLE_LABELS[u['role']]}")
+    return auth.public(u)
+
+
+@app.put("/api/users/{uid}")
+def users_update(uid: int, request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    active = body.get("active")
+    before, after = _users_call(auth.update_user, uid, _user(request), role=body.get("role"),
+                                active=None if active is None else bool(active), display_name=body.get("display_name"))
+    changes = []
+    if before["role"] != after["role"]:
+        changes.append(f"role {auth.ROLE_LABELS[before['role']]} → {auth.ROLE_LABELS[after['role']]}")
+    if bool(before["active"]) != bool(after["active"]):
+        changes.append("enabled" if after["active"] else "disabled")
+    if (before.get("display_name") or "") != (after.get("display_name") or ""):
+        changes.append("display name")
+    _audit_note(request, summary=f"{after['username']}: " + (", ".join(changes) or "no change"))
+    return auth.public(after)
+
+
+@app.post("/api/users/{uid}/password")
+def users_reset_password(uid: int, request: Request, body: dict[str, Any] = Body(...)) -> dict[str, bool]:
+    u = _users_call(auth.reset_password, uid, _user(request), str(body.get("password") or ""))
+    _audit_note(request, summary=u["username"])
+    return {"ok": True}
+
+
+@app.delete("/api/users/{uid}")
+def users_delete(uid: int, request: Request) -> dict[str, bool]:
+    u = _users_call(auth.delete_user, uid, _user(request))
+    _audit_note(request, summary=f"{u['username']} ({auth.ROLE_LABELS.get(u['role'], u['role'])})")
+    return {"ok": True}
+
+
+@app.get("/api/audit")
+def audit_list(actor: str = "", action: str = "", q: str = "", before: int | None = None, limit: int = 100) -> dict[str, Any]:
+    return audit.entries(actor, action, q.strip()[:100], before, limit)
 
 
 # ---------------------------------------------------------------- overview
@@ -383,14 +497,17 @@ def target_get(tid: int) -> dict[str, Any]:
 
 
 @app.post("/api/targets")
-def target_create(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    return target_get(db.insert("targets", _target_payload(body)))
+def target_create(request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    tid = db.insert("targets", _target_payload(body))
+    _audit_note(request, object_id=tid, summary=(db.get("targets", tid) or {}).get("name"))
+    return target_get(tid)
 
 
 @app.put("/api/targets/{tid}")
-def target_update(tid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+def target_update(tid: int, request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
     _target_or_404(tid)
     db.update("targets", tid, _target_payload(body))
+    _audit_note(request, summary=(db.get("targets", tid) or {}).get("name"))
     return target_get(tid)
 
 
@@ -407,7 +524,7 @@ def target_delete(tid: int) -> dict[str, bool]:
 
 
 @app.post("/api/targets/{tid}/scan")
-def target_scan(tid: int, body: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+def target_scan(tid: int, request: Request, body: dict[str, Any] = Body(default={})) -> dict[str, Any]:
     t = _target_or_404(tid)
     opts = _scan_opts(body, t)
     try:
@@ -417,6 +534,7 @@ def target_scan(tid: int, body: dict[str, Any] = Body(default={})) -> dict[str, 
         bad(str(e), 409)
     except ValueError as e:   # includes vault.AuthError
         bad(str(e))
+    _audit_note(request, object_type="scan", object_id=sid, summary=f"{t['name']} · {opts['scan_mode']} mode")
     return _scan_out(db.get_scan(sid))  # type: ignore[return-value]
 
 
@@ -558,15 +676,16 @@ def scan_get(sid: int) -> dict[str, Any]:
 
 
 @app.post("/api/scans/{sid}/cancel")
-def scan_cancel(sid: int) -> dict[str, Any]:
-    _scan_or_404(sid)
+def scan_cancel(sid: int, request: Request) -> dict[str, Any]:
+    s = _scan_or_404(sid)
+    _audit_note(request, summary=f"{s.get('target_name') or s.get('name') or ''} · was {s['status']}")
     if not runner.cancel(sid):
         bad("This scan cannot be cancelled")
     return _scan_out(db.get_scan(sid))  # type: ignore[return-value]
 
 
 @app.post("/api/scans/{sid}/resume")
-def scan_resume(sid: int, body: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+def scan_resume(sid: int, request: Request, body: dict[str, Any] = Body(default={})) -> dict[str, Any]:
     s = _scan_or_404(sid)
     if s.get("trigger") == "verify":
         bad("Use Re-verify in the finding details. New verification evidence must be collected in a separate run.")
@@ -585,6 +704,7 @@ def scan_resume(sid: int, body: dict[str, Any] = Body(default={})) -> dict[str, 
         bad(str(e), 409)
     except ValueError as e:   # includes vault.AuthError (profile removed/unassigned since the original run)
         bad(str(e))
+    _audit_note(request, summary=f"Resumed as scan #{new}")
     return _scan_out(db.get_scan(new))  # type: ignore[return-value]
 
 
@@ -697,20 +817,21 @@ def scan_message_activity(sid: int, mid: int, limit: int = 60, after: int | None
     return {**base, **r, "marker_position": pos}
 
 @app.post("/api/scans/{sid}/messages")
-def scan_message_send(sid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+def scan_message_send(sid: int, request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
     scan = _scan_or_404(sid)
     agent_id = str(body.get("agent_id") or "")
     name = next((a["name"] for a in (runs.agents(_run_dir(scan))["agents"] if _run_dir(scan) else [])
                  if a.get("id") == agent_id), agent_id)
     try:
         row = control.send(scan, agent_id, str(name), str(body.get("content") or ""),
-                           str(body.get("request_id") or ""), user=auth.ADMIN_USER)
+                           str(body.get("request_id") or ""), user=_user(request)["username"])
     except FileExistsError as e:
         bad(str(e), 409)
     except control.Unavailable as e:
         bad(str(e), 409)
     except ValueError as e:
         bad(str(e))
+    _audit_note(request, summary=f"To {name} · message #{row['id']}")   # instruction text is never logged
     red = vault.scan_redactor(scan)
     return control.out_row(db.get("agent_messages", row["id"]), red)
 
@@ -874,7 +995,7 @@ def settings_rotate_token() -> dict[str, str]:
 
 # ---------------------------------------------------------------- CI API (X-API-Token)
 @app.post("/api/ci/targets/{tid}/scan")
-def ci_scan(tid: int, body: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+def ci_scan(tid: int, request: Request, body: dict[str, Any] = Body(default={})) -> dict[str, Any]:
     t = _target_or_404(tid)
     opts = _scan_opts(body, t)
     try:
@@ -884,6 +1005,7 @@ def ci_scan(tid: int, body: dict[str, Any] = Body(default={})) -> dict[str, Any]
         bad(str(e), 409)
     except ValueError as e:   # includes vault.AuthError
         bad(str(e))
+    _audit_note(request, object_type="scan", object_id=sid, summary=f"{t['name']} · CI pipeline")
     return {"scan_id": sid, "status": "queued"}
 
 
@@ -1094,6 +1216,28 @@ def campaign_findings(cid: int) -> dict[str, Any]:
     return _finding_group_out(None, campaigns.scan_ids(cid))
 
 
+def _report_out(request: Request, data: dict[str, Any]) -> dict[str, Any]:
+    u = _user(request)
+    data["generated_by"] = u.get("display_name") or u["username"]
+    data["timezone"] = TIMEZONE
+    audit.record(u["username"], "report.view", actor_id=u["id"], actor_role=u["role"], object_type=data["kind"],
+                 object_id=data["id"], summary=data["name"], method="GET", path=request.url.path, status=200,
+                 ip=_client_ip(request))
+    return data
+
+
+@app.get("/api/targets/{tid}/report")
+def target_report(tid: int, request: Request) -> dict[str, Any]:
+    _target_or_404(tid)
+    return _report_out(request, report.for_target(tid))
+
+
+@app.get("/api/campaigns/{cid}/report")
+def campaign_report(cid: int, request: Request) -> dict[str, Any]:
+    _campaign_or_404(cid)
+    return _report_out(request, report.for_campaign(cid))
+
+
 @app.get("/api/findings/{gid}")
 def finding_get(gid: int) -> dict[str, Any]:
     g = db.q1(findings_store.GROUP_SELECT + " WHERE g.id=?", (gid,)) or bad("Finding not found", 404)
@@ -1103,7 +1247,7 @@ def finding_get(gid: int) -> dict[str, Any]:
 
 
 @app.post("/api/findings/{gid}/verify")
-def finding_verify(gid: int, body: dict[str, Any] = Body(default={})) -> dict[str, Any]:
+def finding_verify(gid: int, request: Request, body: dict[str, Any] = Body(default={})) -> dict[str, Any]:
     """Start a focused Strix re-run that re-tests this one finding. The original finding is never modified; the
     result is classified from the run's own evidence (see verify.py)."""
     g = db.get("finding_groups", gid) or bad("Finding not found", 404)
@@ -1131,6 +1275,7 @@ def finding_verify(gid: int, body: dict[str, Any] = Body(default={})) -> dict[st
         bad(str(e), 409)
     except ValueError as e:   # includes vault.AuthError
         bad(str(e))
+    _audit_note(request, summary=f"Verification scan #{sid}")
     row = db.q1("SELECT * FROM finding_verifications WHERE scan_id=?", (sid,))
     return {"verification": verify.public(row), "scan_id": sid}
 
@@ -1166,39 +1311,44 @@ def finding_exchange_download(gid: int, run_name: str, request_id: str) -> Respo
 
 
 @app.post("/api/findings/{gid}/notes")
-def finding_note_add(gid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+def finding_note_add(gid: int, request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
     db.get("finding_groups", gid) or bad("Finding not found", 404)
-    _ws(workspace.add_note, gid, body.get("body"), auth.ADMIN_USER, body.get("occurrence_id") or None,
+    _ws(workspace.add_note, gid, body.get("body"), _user(request)["username"], body.get("occurrence_id") or None,
         body.get("verification_id") or None)
     return {"notes": workspace.notes(gid)}
 
 
 @app.put("/api/findings/{gid}/notes/{nid}")
-def finding_note_edit(gid: int, nid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    _ws(workspace.edit_note, gid, nid, body.get("body"), auth.ADMIN_USER)
+def finding_note_edit(gid: int, nid: int, request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    _ws(workspace.edit_note, gid, nid, body.get("body"), _user(request)["username"])
+    _audit_note(request, summary=f"Note #{nid}")
     return {"notes": workspace.notes(gid)}
 
 
 @app.post("/api/findings/{gid}/labels")
-def finding_label(gid: int, body: dict[str, Any] = Body(...)) -> dict[str, bool]:
+def finding_label(gid: int, request: Request, body: dict[str, Any] = Body(...)) -> dict[str, bool]:
     db.get("finding_groups", gid) or bad("Finding not found", 404)
     _ws(workspace.set_label, gid, str(body.get("run_name") or ""), str(body.get("request_id") or ""),
-        str(body.get("label") or ""), auth.ADMIN_USER, body.get("occurrence_id") or None)
+        str(body.get("label") or ""), _user(request)["username"], body.get("occurrence_id") or None)
+    _audit_note(request, summary=f"Request {str(body.get('request_id') or '')[:40]} → {str(body.get('label') or '')[:40]}")
     return {"ok": True}
 
 
 @app.post("/api/findings/{gid}/occurrences/{oid}/review")
-def finding_occurrence_review(gid: int, oid: int, body: dict[str, Any] = Body(...)) -> dict[str, bool]:
-    _ws(workspace.review, gid, oid, str(body.get("decision") or ""), str(body.get("note") or ""), auth.ADMIN_USER)
+def finding_occurrence_review(gid: int, oid: int, request: Request, body: dict[str, Any] = Body(...)) -> dict[str, bool]:
+    _ws(workspace.review, gid, oid, str(body.get("decision") or ""), str(body.get("note") or ""), _user(request)["username"])
+    _audit_note(request, summary=f"Occurrence #{oid}: {str(body.get('decision') or '')[:40]}")
     return {"ok": True}
 
 
 @app.patch("/api/findings/{gid}")
-def finding_patch(gid: int, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    db.get("finding_groups", gid) or bad("Finding not found", 404)
+def finding_patch(gid: int, request: Request, body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    g = db.get("finding_groups", gid) or bad("Finding not found", 404)
     rem = body.get("remediation")
     if rem not in findings_store.REMEDIATION:
         bad("Invalid status")
+    title = vault.finding_redactor(gid).text(str(g.get("title") or ""), strict=True)[:120]
+    _audit_note(request, summary=f"{g.get('remediation')} → {rem} · {title}")
     db.execute("UPDATE finding_groups SET remediation=?, remediation_note=?, remediation_at=? WHERE id=?",
                (rem, (body.get("remediation_note") or "").strip(), db.now_iso(), gid))
     return finding_get(gid)

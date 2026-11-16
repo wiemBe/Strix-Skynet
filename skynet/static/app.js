@@ -52,6 +52,9 @@ const ICONS = {
   inventory: '<rect x="3.5" y="4" width="17" height="5" rx="1.2"/><rect x="3.5" y="11" width="17" height="5" rx="1.2"/><path d="M7 6.5h2M7 13.5h2"/>',
   auth: '<rect x="4" y="4.5" width="16" height="15" rx="2"/><circle cx="12" cy="12" r="3.2"/><path d="M12 15.2V18M15.2 12H18"/>',
   archive: '<rect x="3.5" y="5" width="17" height="4" rx="1"/><path d="M5 9v10h14V9M10 13h4"/>',
+  audit: '<path d="M7 4.5h10a1.5 1.5 0 0 1 1.5 1.5v13.5H5.5V6A1.5 1.5 0 0 1 7 4.5z"/><path d="M9 9h6M9 12.5h6M9 16h3.5"/>',
+  users: '<circle cx="9" cy="9" r="3.2"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6"/><path d="M15.5 6.2a3 3 0 0 1 0 5.6M17.5 14.8c1.5.6 2.6 2 3 4.2"/>',
+  report: '<path d="M6 3.5h8l4 4V20.5H6z"/><path d="M14 3.5V8h4M9 17v-3M12 17v-5M15 17v-2"/>',
 };
 function icon(name) {
   const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -96,6 +99,21 @@ const pollGuard = (fn) => async (...a) => { try { const r = await fn(...a); setC
 
 // ================================================================== formatting
 let TZ = "Europe/Istanbul";
+// Signed-in account (from /api/me). The server enforces every permission; the UI only hides what a role can't use.
+let ME = { username: "", role: "viewer", role_label: "Viewer" };
+const ROLE_RANK = { viewer: 1, analyst: 2, admin: 3 };
+const ROLE_NAMES = { viewer: "Viewer", analyst: "Analyst", admin: "Admin" };
+const ROLE_HELP = { viewer: "Read-only: sees scans, findings and reports.", analyst: "Viewer + starts/stops scans, messages agents, verifies and triages findings, manages targets, schedules and campaigns.", admin: "Analyst + settings, LLM connections, auth profiles (secrets), deletions, users and the audit log." };
+const can = (need) => (ROLE_RANK[ME.role] || 0) >= (ROLE_RANK[need] || 3);
+// Action labels that need more than read access; used by button()/menu() so each call site stays unchanged.
+const LABEL_NEEDS = {
+  "New target": "analyst", "Create target": "analyst", "New scan": "analyst", "Start scan": "analyst", "Scan": "analyst",
+  "Scan now": "analyst", "Scan again": "analyst", "Resume": "analyst", "Stop": "analyst", "Remove from queue": "analyst",
+  "Create schedule": "analyst", "Add schedule": "analyst", "New campaign": "analyst", "Verify": "analyst",
+  "Start verification": "analyst", "Re-verify": "analyst", "Send": "analyst", "Add note": "analyst", "Save revision": "analyst",
+  "Edit": "analyst", "Pause": "analyst", "Enable": "analyst", "Archive": "analyst", "Unarchive": "analyst",
+  "New profile": "admin", "Add connection": "admin", "Delete": "admin", "Delete target": "admin", "Make default": "admin",
+};
 const dateFmt = (iso, opts) => { if (!iso) return "—"; const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString("en-US", { timeZone: TZ, ...opts }); };
 const fmtDate = (iso) => dateFmt(iso, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const fmtDateSec = (iso) => dateFmt(iso, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -145,8 +163,9 @@ const VERIFY_TR = { verified: "Pre-check passed", failed: "Failed", not_configur
   not_applicable: "Not applicable", blocked: "Out of scope", not_checked: "Not checked" };
 
 // ================================================================== components
-function button(label, { kind = "", ic, onclick, disabled, title, size, type = "button" } = {}) {
-  return h("button", { type, class: ["btn", kind, size, !label && ic ? "icon" : ""].filter(Boolean).join(" "), onclick, disabled, title, "aria-label": !label ? title : null },
+function button(label, { kind = "", ic, onclick, disabled, title, size, type = "button", need } = {}) {
+  const req = need || LABEL_NEEDS[label];
+  return h("button", { type, class: ["btn", kind, size, !label && ic ? "icon" : "", req && !can(req) ? "role-hidden" : ""].filter(Boolean).join(" "), onclick, disabled, title, "aria-label": !label ? title : null },
     ic ? icon(ic) : null, label || null);
 }
 function errorHeadline(err) {
@@ -215,7 +234,10 @@ function menu(items, { label = null, title = "More actions" } = {}) {
   const box = h("div", { class: "menu", hidden: true, role: "menu" });
   const close = () => { box.hidden = true; document.removeEventListener("click", outside, true); };
   const outside = (e) => { if (!wrap.contains(e.target)) close(); };
-  for (const it of items.filter(Boolean)) {
+  const visible = items.filter((it) => it && (it === "-" || can(it.need || LABEL_NEEDS[it.label] || "viewer")))
+    .filter((it, i, a) => it !== "-" || (i > 0 && a[i - 1] !== "-" && i < a.length - 1));
+  if (!visible.length) return h("span", { class: "menu-wrap" });
+  for (const it of visible) {
     if (it === "-") { box.append(h("hr")); continue; }
     box.append(h("button", { type: "button", role: "menuitem", class: it.danger ? "danger" : null, onclick: (e) => { e.stopPropagation(); close(); it.onclick(); } }, it.icon ? icon(it.icon) : null, it.label));
   }
@@ -268,8 +290,12 @@ function confirmDialog(title, desc, { confirmLabel = "Confirm", danger = false }
 const closeDialogs = () => $("#dialogs").replaceChildren();
 
 // ================================================================== shell: navigation + system status
-const NAV = [["overview", "#/", "Overview"], ["targets", "#/targets", "Targets"], ["campaigns", "#/campaigns", "Campaigns"], ["scans", "#/scans", "Scans"], ["schedules", "#/schedules", "Schedules"], ["inventory", "#/inventory", "Inventory"], ["auth", "#/auth-profiles", "Auth profiles"], ["settings", "#/settings", "Settings"]];
-$("#nav").replaceChildren(NAV.map(([k, href, label]) => h("a", { href, "data-nav": k }, icon(k), h("span", {}, label), k === "scans" ? h("span", { class: "badge-count", id: "activeCount" }) : null)));
+const NAV = [["overview", "#/", "Overview"], ["targets", "#/targets", "Targets"], ["campaigns", "#/campaigns", "Campaigns"], ["scans", "#/scans", "Scans"], ["schedules", "#/schedules", "Schedules"], ["inventory", "#/inventory", "Inventory"], ["auth", "#/auth-profiles", "Auth profiles"], ["audit", "#/audit", "Audit log", "admin"], ["settings", "#/settings", "Settings"]];
+function renderShell() {
+  document.body.dataset.role = ME.role;
+  $("#nav").replaceChildren(NAV.filter((n) => can(n[3] || "viewer")).map(([k, href, label]) => h("a", { href, "data-nav": k }, icon(k), h("span", {}, label), k === "scans" ? h("span", { class: "badge-count", id: "activeCount" }) : null)));
+  $("#whoami").replaceChildren(h("span", { class: "who-name", title: ME.username }, ME.display_name || ME.username || "—"), h("span", { class: "who-role" }, ME.role_label || ROLE_NAMES[ME.role] || ""));
+}
 $("#logoutBtn").addEventListener("click", guard(async () => { await api("/api/logout", { method: "POST" }); location.href = "/login"; }));
 
 let lastOverview = null;
@@ -285,7 +311,7 @@ async function refreshSystem() {
     if (!o.llm_default) issues.push("No LLM connection");
     box.replaceChildren(issues.length ? h("a", { class: "sys-alert", href: "#/settings", title: issues.join("\n") },
       h("span", { class: "dot-bad" }), h("span", { class: "lbl" }, issues.length === 1 ? issues[0] : `${issues.length} sistem sorunu`)) : null);
-    $("#activeCount").textContent = o.active.length ? String(o.active.length) : "";
+    const ac = document.getElementById("activeCount"); if (ac) ac.textContent = o.active.length ? String(o.active.length) : "";
     return o;
   } catch (e) {
     box.replaceChildren(h("div", { class: "sys-alert", title: e.message }, h("span", { class: "dot-bad" }), h("span", { class: "lbl" }, "Can't reach the server")));
@@ -316,6 +342,9 @@ const routes = [
   [/^#\/inventory(?:\?target=(\d+))?$/, "inventory", (t) => viewInventory(t ? +t : null)],
   [/^#\/auth-profiles$/, "auth", viewAuthProfiles],
   [/^#\/settings$/, "settings", viewSettings],
+  [/^#\/audit(?:\?(.*))?$/, "audit", (q) => viewAudit(q)],
+  [/^#\/targets\/(\d+)\/report$/, "targets", (id) => viewReport("targets", +id)],
+  [/^#\/campaigns\/(\d+)\/report$/, "campaigns", (id) => viewReport("campaigns", +id)],
 ];
 async function router() {
   timers.forEach(clearInterval); timers = [];
@@ -536,7 +565,8 @@ async function viewTarget(id) {
         menu([{ label: "Edit", icon: "edit", onclick: () => go(`#/targets/${id}/edit`) },
           { label: "View inventory", icon: "inventory", onclick: () => go(`#/inventory?target=${id}`) },
           { label: "Compare scans", icon: "scans", onclick: () => go(`#/targets/${id}/compare`) }, "-",
-          { label: "Delete target", icon: "trash", danger: true, onclick: del }]),
+          { label: "Delete target", icon: "trash", danger: true, need: "admin", onclick: del }]),
+        button("Report", { ic: "report", title: "Management report (print or save as PDF)", onclick: () => go(`#/targets/${id}/report`) }),
         button("Add schedule", { ic: "schedules", onclick: () => go(`#/schedules/new?target=${id}`) }),
         button(t.active_scan ? "Scan in progress" : "Scan now", { kind: "primary", ic: "play", disabled: !!t.active_scan, onclick: () => scanDialog(t) })] }),
     t.active_scan ? alertBox("info", "This target has an active scan", ["Scan ", h("a", { href: `#/scans/${t.active_scan.id}` }, `#${t.active_scan.id}`), ` is ${STATUS_TR[t.active_scan.status].toLowerCase()}. Back-to-back scans on the same target aren't allowed.`]) : null,
@@ -787,7 +817,7 @@ async function viewScan(id) {
     compose.send = button("Send", { kind: "primary", size: "sm", onclick: () => sendMessage(), disabled: true, title: "Send (⌘/Ctrl+Enter)" });
     compose.hint = h("div", { class: "compose-hint", role: "status" }, "Checking whether this scan accepts messages…");
     compose.history = h("div", { class: "compose-history" });
-    compose.form = h("div", { class: "compose-form", hidden: true },
+    compose.form = h("div", { class: "compose-form" + (can("analyst") ? "" : " role-hidden"), hidden: true },
       h("div", { class: "compose-row" }, h("label", { class: "compose-label", for: "composeAgent" }, "Message"), compose.select, compose.count),
       compose.text,
       h("div", { class: "compose-foot" }, h("span", { class: "help" }, "Added to the agent's context before its next model call. Keep credentials in the Vault."), compose.send));
@@ -1205,8 +1235,29 @@ async function viewScheduleForm(id, presetTarget) {
 }
 
 // ================================================================== settings
+// Own account: identity, role and password. Shown to every role (non-admins see only this on Settings).
+function accountSection({ wide = false } = {}) {
+  const pw = { current: h("input", { type: "password", autocomplete: "current-password" }), next: h("input", { type: "password", autocomplete: "new-password" }) };
+  const info = h("dl", { class: "dl" },
+    h("dt", {}, "Username"), h("dd", { class: "mono" }, ME.username),
+    h("dt", {}, "Role"), h("dd", {}, h("span", { class: `role-chip ${ME.role}` }, ROLE_NAMES[ME.role] || ME.role), h("div", { class: "help" }, ROLE_HELP[ME.role] || "")),
+    h("dt", {}, "Last sign-in"), h("dd", {}, ME.last_login_at ? fmtDate(ME.last_login_at) : "—"));
+  const form = ME.password_from_env
+    ? h("div", { class: "muted account-note" }, "This built-in account's password comes from the SKYNET_PASSWORD environment variable; change it in the server configuration.")
+    : h("form", { class: "fields account-pw", onsubmit: guard(async (e) => {
+      e.preventDefault();
+      await api("/api/settings/password", { method: "POST", body: { current: pw.current.value, new: pw.next.value } });
+      toast("Password changed. Please sign in again."); setTimeout(() => (location.href = "/login"), 1200);
+    }) }, field("Current password", pw.current), field("New password", pw.next, "At least 10 characters. Your other sessions are signed out."), h("div", {}, button("Change password", { type: "submit" })));
+  return section("Your account", h("div", { class: "card card-pad account" + (wide ? " wide" : "") }, info, form));
+}
+
 async function viewSettings() {
-  const [st, profiles] = await Promise.all([api("/api/settings"), api("/api/llm-profiles")]);
+  if (!can("admin")) {
+    app.replaceChildren(pageHead("Settings", { lead: "Your account. System settings, users and the audit log are managed by admins." }), accountSection({ wide: true }));
+    return;
+  }
+  const [st, profiles, users] = await Promise.all([api("/api/settings"), api("/api/llm-profiles"), api("/api/users")]);
   const f = {
     strix_bin: h("input", { type: "text", value: st.strix_bin, class: "mono" }),
     strix_workdir: h("input", { type: "text", value: st.strix_workdir, class: "mono" }),
@@ -1220,7 +1271,6 @@ async function viewSettings() {
     await api("/api/settings", { method: "PUT", body: Object.fromEntries(Object.entries(f).map(([k, el]) => [k, el.type === "checkbox" ? el.checked : el.value])) });
     toast("Settings saved"); refreshSystem();
   });
-  const pw = { current: h("input", { type: "password", autocomplete: "current-password" }), next: h("input", { type: "password", autocomplete: "new-password" }) };
   const llmRows = profiles.map((p) => h("tr", {},
     h("td", {}, h("div", { class: "cell-clip" }, h("div", { class: "primary-line" }, p.name, p.is_default ? [" ", h("span", { class: "tag accent" }, "Default")] : null),
       h("div", { class: "secondary-line mono", title: p.strix_model }, p.strix_model))),
@@ -1290,13 +1340,8 @@ async function viewSettings() {
             [button("Copy", { kind: "primary", onclick: guard(async () => { await navigator.clipboard.writeText(r.api_token); toast("Copied"); }) })]);
           inp.select(); st.has_api_token = true;
         }) }))),
-      section("Admin password", st.password_from_env
-        ? h("div", { class: "card card-pad muted" }, "The password comes from the SKYNET_PASSWORD environment variable; update the server configuration to change it.")
-        : h("form", { class: "card card-pad fields", onsubmit: guard(async (e) => {
-          e.preventDefault();
-          await api("/api/settings/password", { method: "POST", body: { current: pw.current.value, new: pw.next.value } });
-          toast("Password changed. Please sign in again."); setTimeout(() => (location.href = "/login"), 1200);
-        }) }, field("Current password", pw.current), field("New password", pw.next, "At least 10 characters."), h("div", {}, button("Change password", { type: "submit" }))))));
+      accountSection()),
+    usersSection(users));
   app.querySelectorAll("pre.ci").forEach((p) => { p.style.margin = "14px 0"; p.style.color = "var(--text-2)"; });
   app.querySelectorAll(".section > div > .note").forEach((n) => { n.style.marginTop = "10px"; });
 }
@@ -1432,6 +1477,7 @@ async function viewCampaign(id) {
         menu([c.archived ? null : { label: "Edit", icon: "edit", onclick: () => go(`#/campaigns/${id}/edit`) },
           { label: c.archived ? "Unarchive" : "Archive", icon: "archive", onclick: archive }, "-",
           { label: "Delete", icon: "trash", danger: true, onclick: del }]),
+        button("Report", { ic: "report", title: "Management report (print or save as PDF)", onclick: () => go(`#/campaigns/${id}/report`) }),
         button("New scan", { kind: "primary", ic: "play", onclick: () => scanDialog(null, { campaign_id: id, target_ids: c.target_ids }) })] }),
     c.description ? h("p", { class: "lead-text" }, c.description) : null,
     c.scope ? alertBox("info", "Engagement scope", c.scope) : null,
@@ -1575,7 +1621,7 @@ async function findingsDialog(scanIds, campaignId) {
     }).catch(() => { occ.replaceChildren(h("div", { class: "faint" }, "Could not load occurrences.")); verifBox.replaceChildren(h("div", { class: "faint" }, "Could not load verifications.")); });
     return h("div", { class: "finding-body" },
       h("div", { class: "note" }, [g.cwe, g.host, `first: ${fmtShort(g.first_seen_at)}`, `last: ${fmtShort(g.last_seen_at)}`].filter(Boolean).join(" · ")),
-      h("div", { class: "rem-edit" }, h("label", {}, "Remediation status"), remSel, note,
+      h("div", { class: "rem-edit" + (can("analyst") ? "" : " role-hidden") }, h("label", {}, "Remediation status"), remSel, note,
         button("Save", { size: "sm", kind: "primary", onclick: guard(async () => {
           await api(`/api/findings/${g.id}`, { method: "PATCH", body: { remediation: remSel.value, remediation_note: note.value } });
           g.remediation = remSel.value; g.remediation_note = note.value; toast("Updated"); render();
@@ -1761,9 +1807,245 @@ async function assetDialog(a) {
     [button("Close", { onclick: () => close() })], { wide: true });
 }
 
+// ================================================================== users (admin)
+function usersSection(users) {
+  const rows = users.map((u) => h("tr", {},
+    h("td", {}, h("div", { class: "primary-line" }, u.display_name || u.username, u.id === ME.id ? [" ", h("span", { class: "tag" }, "You")] : null, u.builtin ? [" ", h("span", { class: "tag accent", title: "SKYNET_USER account from the server configuration; always an active admin." }, "Built-in")] : null),
+      h("div", { class: "secondary-line mono" }, u.username)),
+    h("td", {}, h("span", { class: `role-chip ${u.role}` }, ROLE_NAMES[u.role] || u.role)),
+    h("td", {}, u.active ? h("span", { class: "status active" }, h("span", { class: "dot" }), "Active") : h("span", { class: "status cancelled" }, h("span", { class: "dot" }), "Disabled")),
+    h("td", { class: "nowrap" }, u.last_login_at ? fmtShort(u.last_login_at) : h("span", { class: "faint" }, "Never")),
+    h("td", { class: "shrink right" }, u.builtin || u.id === ME.id ? h("span", { class: "faint help" }, u.builtin ? "Server-managed" : "") : menu([
+      { label: "Change role", icon: "users", need: "admin", onclick: () => userDialog(u) },
+      { label: "Reset password", icon: "refresh", need: "admin", onclick: () => resetPasswordDialog(u) },
+      { label: u.active ? "Disable" : "Enable account", icon: u.active ? "pause" : "play", need: "admin", onclick: guard(async () => {
+        if (u.active && !await confirmDialog("Disable account?", `${u.username} is signed out immediately and can't sign in until re-enabled. Their history stays in the audit log.`, { confirmLabel: "Disable", danger: true })) return;
+        await api(`/api/users/${u.id}`, { method: "PUT", body: { active: !u.active } }); toast(u.active ? "Account disabled" : "Account enabled"); router();
+      }) }, "-",
+      { label: "Delete user", icon: "trash", danger: true, need: "admin", onclick: guard(async () => {
+        if (!await confirmDialog("Delete user?", `${u.username} is removed and signed out. Notes and audit entries keep their name. This can't be undone; disabling keeps the account instead.`, { confirmLabel: "Delete", danger: true })) return;
+        await api(`/api/users/${u.id}`, { method: "DELETE" }); toast("User deleted"); router();
+      }) }]))));
+  return section("Users", h("div", {},
+    h("div", { class: "table-card" }, table([{ label: "User" }, { label: "Role" }, { label: "Status" }, { label: "Last sign-in" }, { label: "", cls: "shrink" }], rows)),
+    h("div", { class: "note roles-note" }, Object.entries(ROLE_HELP).map(([r, t]) => h("div", {}, h("span", { class: `role-chip ${r}` }, ROLE_NAMES[r]), " ", t)))),
+  { right: button("Add user", { ic: "plus", size: "sm", need: "admin", onclick: () => userDialog(null) }) });
+}
+
+function userDialog(u) {
+  const f = {
+    username: h("input", { type: "text", autocomplete: "off", value: u ? u.username : "", disabled: !!u, class: "mono" }),
+    display_name: h("input", { type: "text", value: u ? u.display_name || "" : "", placeholder: "Optional, e.g. Ayşe Yılmaz" }),
+    role: select(Object.entries(ROLE_NAMES), u ? u.role : "analyst"),
+    password: h("input", { type: "password", autocomplete: "new-password" }),
+  };
+  const roleHelp = h("div", { class: "help" }, ROLE_HELP[f.role.value]);
+  f.role.addEventListener("change", () => { roleHelp.textContent = ROLE_HELP[f.role.value]; });
+  const save = guard(async () => {
+    if (u) await api(`/api/users/${u.id}`, { method: "PUT", body: { role: f.role.value, display_name: f.display_name.value } });
+    else await api("/api/users", { method: "POST", body: { username: f.username.value, display_name: f.display_name.value, role: f.role.value, password: f.password.value } });
+    close(); toast(u ? "User updated" : "User created"); router();
+  });
+  const close = dialog(u ? `Edit ${u.username}` : "Add user", h("form", { class: "fields", onsubmit: (e) => { e.preventDefault(); save(); } },
+    field("Username", f.username, u ? "Usernames can't be changed." : "Used to sign in. Letters, digits and . _ @ -"),
+    field("Display name", f.display_name),
+    h("div", { class: "field" }, h("label", { for: "userRole" }, "Role"), Object.assign(f.role, { id: "userRole" }), roleHelp),
+    u ? null : field("Initial password", f.password, "At least 10 characters. Share it securely; the user can change it under Settings."),
+    h("button", { type: "submit", hidden: true })),
+  [button("Cancel", { onclick: () => close() }), button(u ? "Save" : "Create user", { kind: "primary", onclick: save })]);
+}
+
+function resetPasswordDialog(u) {
+  const pw = h("input", { type: "password", autocomplete: "new-password" });
+  const save = guard(async () => {
+    await api(`/api/users/${u.id}/password`, { method: "POST", body: { password: pw.value } });
+    close(); toast(`Password reset; ${u.username}'s sessions were signed out`);
+  });
+  const close = dialog(`Reset password · ${u.username}`, h("form", { class: "fields", onsubmit: (e) => { e.preventDefault(); save(); } },
+    field("New password", pw, "At least 10 characters. Existing sessions of this user are signed out."), h("button", { type: "submit", hidden: true })),
+  [button("Cancel", { onclick: () => close() }), button("Reset password", { kind: "primary", onclick: save })]);
+}
+
+// ================================================================== audit log (admin)
+async function viewAudit(query) {
+  const params = new URLSearchParams(query || "");
+  const state = { actor: params.get("actor") || "", action: params.get("action") || "", q: params.get("q") || "" };
+  const first = await api(`/api/audit?${new URLSearchParams({ ...state, limit: 100 })}`);
+  const actorSel = select([["", "All users"], ...first.actors.map((a) => [a, a])], state.actor);
+  const groups = [...new Set(first.actions.map(([k]) => k.split(".")[0]))];
+  const GROUP_TR = { auth: "Sign-in", account: "Own account", target: "Targets", scan: "Scans", agent: "Agent instructions", schedule: "Schedules", campaign: "Campaigns", auth_profile: "Auth profiles", llm_profile: "LLM connections", finding: "Findings", settings: "Settings", ci_token: "CI token", user: "Users", report: "Reports" };
+  const actionSel = select([["", "All actions"], ...groups.map((g) => [g, GROUP_TR[g] || g]), ...first.actions.map(([k, l]) => [k, `· ${l}`])], state.action);
+  const search = h("input", { type: "search", value: state.q, placeholder: "Search summary, object id, path" });
+  const tbody = h("tbody", {});
+  const more = button("Load more", { size: "sm" });
+  const OBJ_LINK = { scan: (id) => `#/scans/${id}`, finding: (id) => `#/findings/${id}`, target: (id) => `#/targets/${id}`, schedule: (id) => `#/schedules/${id}`, campaign: (id) => `#/campaigns/${id}` };
+  const row = (e) => h("tr", {},
+    h("td", { class: "nowrap" }, h("time", { datetime: e.at, title: fmtDateSec(e.at) }, fmtShort(e.at))),
+    h("td", {}, h("div", { class: "primary-line" }, e.actor), e.actor_role ? h("div", { class: "secondary-line" }, ROLE_NAMES[e.actor_role] || e.actor_role) : null),
+    h("td", {}, h("div", { class: "primary-line" }, e.action_label, e.status >= 400 ? [" ", h("span", { class: "tag danger", title: `HTTP ${e.status}` }, e.status === 403 ? "Denied" : "Failed")] : null),
+      h("div", { class: "secondary-line mono" }, e.action)),
+    h("td", {}, e.object_type && e.object_id ? (OBJ_LINK[e.object_type] ? h("a", { href: OBJ_LINK[e.object_type](e.object_id) }, `${e.object_type} #${e.object_id}`) : `${e.object_type} #${e.object_id}`) : h("span", { class: "faint" }, "—"),
+      e.summary ? h("div", { class: "secondary-line", title: e.summary }, e.summary) : null),
+    h("td", { class: "nowrap secondary-line mono" }, e.ip || ""));
+  let last = null;
+  const fill = (r, append) => {
+    if (!append) tbody.replaceChildren();
+    r.entries.forEach((e) => tbody.append(row(e)));
+    last = r.entries.length ? r.entries[r.entries.length - 1].id : last;
+    more.hidden = !r.has_more;
+    if (!tbody.childElementCount) tbody.append(h("tr", {}, h("td", { colspan: 5 }, emptyState("No entries", "Nothing matches these filters."))));
+  };
+  const apply = () => { const qs = new URLSearchParams(Object.entries({ actor: actorSel.value, action: actionSel.value, q: search.value.trim() }).filter(([, v]) => v)); go(`#/audit${qs.toString() ? "?" + qs : ""}`); };
+  actorSel.addEventListener("change", apply); actionSel.addEventListener("change", apply);
+  search.addEventListener("keydown", (e) => { if (e.key === "Enter") apply(); });
+  more.addEventListener("click", guard(async () => fill(await api(`/api/audit?${new URLSearchParams({ ...state, before: last, limit: 100 })}`), true)));
+  fill(first, false);
+  app.replaceChildren(
+    pageHead("Audit log", { lead: "Who did what, and when: sign-ins, scans started or stopped, instructions sent to agents, finding status changes and configuration changes. Append-only; request contents and secrets are never recorded." }),
+    h("div", { class: "toolbar audit-filters" }, actorSel, actionSel, search),
+    h("div", { class: "table-card" }, h("div", { class: "table-scroll" }, h("table", { class: "t audit-table" },
+      h("thead", {}, h("tr", {}, ["Time", "User", "Action", "Object", "IP"].map((x) => h("th", {}, x)))), tbody))),
+    h("div", { class: "load-more" }, more));
+}
+
+// ================================================================== management report (print → Save as PDF)
+const svgEl = (tag, attrs = {}, ...kids) => {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) if (v != null) el.setAttribute(k, v);
+  kids.flat().forEach((k) => k != null && el.append(k instanceof Node ? k : document.createTextNode(String(k))));
+  return el;
+};
+const SEVS = ["critical", "high", "medium", "low", "info"];
+const dayText = (d) => d == null ? "—" : d < 1 ? "< 1 day" : `${Math.round(d)} day${Math.round(d) === 1 ? "" : "s"}`;
+
+function trendChart(trend) {
+  const W = 680, H = 190, L = 34, B = 40, T = 12, R = 8;
+  const totals = trend.map((t) => t.counts ? SEVS.reduce((a, k) => a + t.counts[k], 0) : 0);
+  const max = Math.max(4, ...totals);
+  const step = Math.pow(10, Math.floor(Math.log10(max))) * (max / Math.pow(10, Math.floor(Math.log10(max))) > 5 ? 2 : 1);
+  const top = Math.ceil(max / step) * step;
+  const y = (v) => T + (H - T - B) * (1 - v / top);
+  const slot = (W - L - R) / Math.max(trend.length, 1), bw = Math.min(38, slot * 0.6);
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "rpt-chart", role: "img", "aria-label": "Findings per scan, by severity" });
+  for (let v = 0; v <= top; v += step) {
+    svg.append(svgEl("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), class: "grid" }), svgEl("text", { x: L - 6, y: y(v) + 3, class: "axis", "text-anchor": "end" }, v));
+  }
+  trend.forEach((t, i) => {
+    const x = L + slot * i + (slot - bw) / 2;
+    const g = svgEl("g", { class: t.complete ? "bar" : "bar incomplete" });
+    let acc = 0;
+    if (t.counts) for (const k of [...SEVS].reverse()) {
+      const n = t.counts[k]; if (!n) continue;
+      g.append(svgEl("rect", { x, width: bw, y: y(acc + n), height: y(acc) - y(acc + n), class: `sev-${k}` }, svgEl("title", {}, `${SEV_TR[k]}: ${n}`)));
+      acc += n;
+    }
+    if (!totals[i]) g.append(svgEl("line", { x1: x, x2: x + bw, y1: y(0) - 0.5, y2: y(0) - 0.5, class: "zero" }));
+    g.append(svgEl("text", { x: x + bw / 2, y: y(acc) - 4, class: "val", "text-anchor": "middle" }, t.counts ? totals[i] : "?"));
+    g.append(svgEl("text", { x: x + bw / 2, y: H - B + 14, class: "axis", "text-anchor": "middle" }, dateFmt(t.at, { day: "2-digit", month: "short" })));
+    g.append(svgEl("text", { x: x + bw / 2, y: H - B + 26, class: "axis sub", "text-anchor": "middle" }, t.complete ? `#${t.scan_id}` : `#${t.scan_id} ✕`));
+    g.append(svgEl("title", {}, `Scan #${t.scan_id}${t.target_name ? ` · ${t.target_name}` : ""} · ${STATUS_TR[t.status] || t.status}${t.complete ? "" : " (incomplete: not comparable)"}`));
+    svg.append(g);
+  });
+  return svg;
+}
+
+async function viewReport(kind, id) {
+  const r = await api(`/api/${kind}/${id}/report`);
+  const f = r.findings, sm = f.summary, sc = r.scans;
+  const back = kind === "targets" ? `#/targets/${id}` : `#/campaigns/${id}`;
+  const crit = sm.open_counts.critical + sm.open_counts.high;
+  const ageCH = [f.open_age.critical, f.open_age.high].filter((a) => a.n);
+  const oldestCH = ageCH.length ? Math.max(...ageCH.map((a) => a.max)) : null;
+  const tile = (k, v, sub, cls) => h("div", { class: "rpt-tile" + (cls ? " " + cls : "") }, h("div", { class: "k" }, k), h("div", { class: "v" }, v), sub ? h("div", { class: "s" }, sub) : null);
+  const sevBars = () => {
+    const mx = Math.max(1, ...SEVS.map((k) => sm.open_counts[k]));
+    return h("div", { class: "rpt-sevbars" }, SEVS.map((k) => h("div", { class: "row" },
+      h("span", { class: "lbl" }, SEV_TR[k]),
+      h("span", { class: "track" }, h("span", { class: `fill sev-${k}`, "data-w": Math.round(100 * sm.open_counts[k] / mx) })),
+      h("span", { class: "num" }, sm.open_counts[k]))));
+  };
+  const remChips = h("div", { class: "rpt-chips" }, Object.entries(REMEDIATION_TR).map(([k, l]) => h("span", { class: `rpt-chip rem-${k}${sm.remediation[k] ? "" : " zero"}` }, `${l}: ${sm.remediation[k] || 0}`)),
+    sm.seen_after_fix ? h("span", { class: "rpt-chip warn" }, `${sm.seen_after_fix} seen again after being marked fixed`) : null);
+  const ageTable = h("table", { class: "rpt-table" },
+    h("thead", {}, h("tr", {}, ["Severity", "Open", "Open for (median · oldest)", "Fixed · median time"].map((x) => h("th", {}, x)))),
+    h("tbody", {}, SEVS.map((k) => h("tr", {},
+      h("td", { class: "nowrap" }, h("span", { class: `rpt-dot sev-${k}` }), SEV_TR[k]),
+      h("td", { class: "num" }, sm.open_counts[k]),
+      h("td", {}, f.open_age[k].n ? `${dayText(f.open_age[k].median)} · ${dayText(f.open_age[k].max)}` : "—"),
+      h("td", {}, f.time_to_fix[k].n ? `${f.time_to_fix[k].n} · ${dayText(f.time_to_fix[k].median)}` : "—")))));
+  const cov = r.coverage;
+  const coverageBlock = kind === "targets" ? (cov ? h("div", {},
+    h("p", { class: "rpt-src" }, `From scan #${cov.scan_id} · ${fmtDate(cov.at)}${cov.complete === false ? " · Strix marked this coverage record incomplete" : ""}`),
+    cov.cells ? h("div", { class: "rpt-chips" }, Object.entries(cov.labels).map(([k, l]) => h("span", { class: `rpt-chip cov-${k}` }, `${l}: ${cov.counts[k]}`)))
+      : h("p", { class: "rpt-empty" }, "This scan recorded no coverage cells."),
+    (cov.gaps || []).length ? h("ul", { class: "rpt-gaps" }, cov.gaps.map((g) => h("li", {}, g))) : null)
+    : h("p", { class: "rpt-empty" }, "No completed scan has a readable output folder, so there is no coverage record to report."))
+    : h("table", { class: "rpt-table" },
+      h("thead", {}, h("tr", {}, ["Target", "Scans (completed / total)", "Open C / H / M / L", "Coverage (tested / partial / not tested / unknown)"].map((x) => h("th", {}, x)))),
+      h("tbody", {}, (r.targets || []).length ? r.targets.map((t) => h("tr", {},
+        h("td", {}, t.name, t.environment ? h("span", { class: "rpt-env" }, ENV_TR[t.environment] || t.environment) : null),
+        h("td", { class: "num" }, `${t.scans.completed} / ${t.scans.total}`),
+        h("td", { class: "num" }, ["critical", "high", "medium", "low"].map((k) => t.open_counts[k]).join(" / ")),
+        h("td", {}, t.coverage ? `${["tested", "partial", "not_tested", "unknown"].map((k) => t.coverage.counts[k]).join(" / ")} · scan #${t.coverage.scan_id}` : h("span", { class: "rpt-muted" }, t.scans.completed ? "No coverage record" : "No completed scan"))))
+        : h("tr", {}, h("td", { colspan: 4, class: "rpt-empty" }, "No targets in this campaign."))));
+  const topTable = f.top_open.length ? h("table", { class: "rpt-table rpt-top" },
+    h("thead", {}, h("tr", {}, ["Severity", "Finding", kind === "campaigns" ? "Target" : "Location", "First seen", "Open for"].map((x) => h("th", {}, x)))),
+    h("tbody", {}, f.top_open.map((g) => h("tr", {},
+      h("td", {}, h("span", { class: `rpt-sev sev-${g.severity}` }, SEV_TR[g.severity] || g.severity)),
+      h("td", {}, h("span", { class: "t" }, g.title || "Untitled finding"), g.cwe ? h("span", { class: "rpt-muted" }, ` · ${g.cwe}`) : null),
+      h("td", { class: "rpt-where", title: g.host || "" }, kind === "campaigns" ? g.target_name || "—" : g.where || "—"),
+      h("td", { class: "nowrap" }, dateFmt(g.first_seen_at, { day: "2-digit", month: "short", year: "numeric" })),
+      h("td", { class: "nowrap" }, dayText(g.age_days))))))
+    : h("p", { class: "rpt-empty" }, sm.unique ? "No open findings." : "No findings were recorded in these scans.");
+  const sheet = h("article", { class: "report-sheet" },
+    h("header", { class: "rpt-head" },
+      h("div", {}, h("div", { class: "rpt-kicker" }, kind === "targets" ? "Security summary · Target" : "Security summary · Campaign"),
+        h("h1", {}, r.name),
+        h("div", { class: "rpt-meta" }, [r.environment ? ENV_TR[r.environment] || r.environment : null, r.subtitle || null,
+          kind === "campaigns" && r.campaign_status ? (CAMP_STATUS_TR[r.campaign_status] || r.campaign_status) : null].filter(Boolean).join(" · "))),
+      h("div", { class: "rpt-brand" }, h("div", { class: "b" }, "Skynet"),
+        h("div", {}, `Generated ${fmtDate(r.generated_at)}`), h("div", {}, `by ${r.generated_by}`),
+        h("div", {}, sc.first_at ? `Period: ${dateFmt(sc.first_at, { day: "2-digit", month: "short", year: "numeric" })} – ${dateFmt(sc.last_at, { day: "2-digit", month: "short", year: "numeric" })}` : "No scans yet"))),
+    h("div", { class: "rpt-tiles" },
+      tile("Open findings", f.open_total, `${sm.unique} unique finding${sm.unique === 1 ? "" : "s"} in total`),
+      tile("Open critical + high", crit, crit ? `${sm.open_counts.critical} critical · ${sm.open_counts.high} high` : "None open", crit ? "hot" : ""),
+      tile("Oldest open critical/high", oldestCH == null ? "—" : dayText(oldestCH), "Since first seen"),
+      tile("Median time to fix", f.time_to_fix.all.n ? dayText(f.time_to_fix.all.median) : "—", f.time_to_fix.all.n ? `${f.time_to_fix.all.n} marked fixed` : "Nothing marked fixed yet"),
+      tile("Scans", `${sc.completed} / ${sc.total}`, `completed${sc.incomplete ? ` · ${sc.incomplete} incomplete` : ""}${sc.verifications ? ` · ${sc.verifications} verification runs` : ""}`)),
+    h("section", { class: "rpt-section rpt-two" },
+      h("div", {}, h("h2", {}, "Open findings by severity"), sevBars(), remChips),
+      h("div", {}, h("h2", {}, "Findings per scan"), r.trend.length ? [trendChart(r.trend),
+        h("div", { class: "rpt-legend" }, SEVS.map((k) => h("span", {}, h("span", { class: `rpt-dot sev-${k}` }), SEV_TR[k])), h("span", { class: "inc" }, "✕ incomplete scan: not comparable"))]
+        : h("p", { class: "rpt-empty" }, "No finished scans yet."))),
+    ...(() => {
+      const age = h("div", {}, h("h2", {}, "Remediation age"),
+        h("p", { class: "rpt-src" }, "No deadlines (SLA) are set, so compliance isn't shown. Time is counted from first seen."), ageTable);
+      return kind === "targets"
+        ? [h("section", { class: "rpt-section rpt-two even" }, age, h("div", {}, h("h2", {}, "Test coverage"), coverageBlock))]
+        : [h("section", { class: "rpt-section" }, age), h("section", { class: "rpt-section" }, h("h2", {}, "Targets"), coverageBlock)];
+    })(),
+    h("section", { class: "rpt-section" }, h("h2", {}, `Open findings${f.top_open.length ? ` · top ${f.top_open.length}` : ""}`), topTable,
+      f.open_more ? h("p", { class: "rpt-src" }, `${f.open_more} more open finding${f.open_more === 1 ? "" : "s"} not listed; see Skynet for the full list.`) : null),
+    h("footer", { class: "rpt-notes" }, h("h3", {}, "How to read this report"), h("ul", {}, r.notes.map((n) => h("li", {}, n)))));
+  sheet.querySelectorAll(".fill[data-w]").forEach((el) => { el.style.width = `${el.dataset.w}%`; });
+  const title = `Skynet report - ${r.name} - ${dateFmt(r.generated_at, { year: "numeric", month: "2-digit", day: "2-digit" })}`;
+  const print = () => {
+    const prev = document.title; document.title = title;
+    window.addEventListener("afterprint", () => { document.title = prev; }, { once: true });
+    window.print();
+  };
+  app.replaceChildren(h("div", { class: "report-page" },
+    h("div", { class: "report-toolbar" },
+      h("a", { href: back, class: "crumb" }, icon("back"), kind === "targets" ? "Back to target" : "Back to campaign"),
+      h("span", { class: "hint" }, "In the print dialog choose “Save as PDF”. A4, light theme."),
+      button("Download PDF", { kind: "primary", ic: "download", onclick: print })),
+    sheet));
+}
+
 // ================================================================== boot
 (async () => {
-  try { const st = await api("/api/settings"); TZ = st.timezone || TZ; } catch { /* redirected or offline */ }
+  try { ME = await api("/api/me"); TZ = ME.timezone || TZ; } catch { /* redirected or offline */ }
+  renderShell();
   router();
   refreshSystem();
   setInterval(refreshSystem, 15000);

@@ -20,7 +20,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from . import db, runner
+from . import audit, db, runner
 from .config import TIMEZONE
 
 log = logging.getLogger("skynet.scheduler")
@@ -130,6 +130,8 @@ def _fire(schedule_id: int) -> None:
         sid = runner.enqueue(target, s, "schedule", schedule_id=schedule_id,
                              campaign_id=s.get("campaign_id"), auth_profile_ids=s.get("auth_profile_ids") or [])
         event(schedule_id, "started", "", sid)
+        audit.record("scheduler", "scan.start", object_type="scan", object_id=sid,
+                     summary=f"{target['name']} · schedule #{schedule_id} {s.get('name') or ''}".strip())
     except runner.Busy as e:
         event(schedule_id, "skipped_busy", str(e))
     except ValueError as e:   # includes vault.AuthError: a deleted/unassigned profile pauses this run, not the schedule

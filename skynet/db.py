@@ -387,12 +387,47 @@ CREATE TABLE occurrence_reviews (
 CREATE INDEX idx_occ_reviews ON occurrence_reviews(occurrence_id, id);
 """
 
+MIGRATION_6 = """
+CREATE TABLE users (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    username            TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    display_name        TEXT DEFAULT '',
+    role                TEXT NOT NULL DEFAULT 'viewer',
+    password_hash       TEXT,
+    active              INTEGER NOT NULL DEFAULT 1,
+    builtin             INTEGER NOT NULL DEFAULT 0,
+    created_at          TEXT,
+    updated_at          TEXT,
+    last_login_at       TEXT,
+    password_changed_at TEXT
+);
+CREATE TABLE audit_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    at          TEXT NOT NULL,
+    actor       TEXT NOT NULL,
+    actor_id    INTEGER,
+    actor_role  TEXT DEFAULT '',
+    action      TEXT NOT NULL,
+    object_type TEXT DEFAULT '',
+    object_id   TEXT DEFAULT '',
+    summary     TEXT DEFAULT '',
+    method      TEXT DEFAULT '',
+    path        TEXT DEFAULT '',
+    status      INTEGER,
+    ip          TEXT DEFAULT ''
+);
+CREATE INDEX idx_audit_at ON audit_log(id DESC);
+CREATE INDEX idx_audit_actor ON audit_log(actor, id DESC);
+"""
+
+
 MIGRATIONS: list[tuple[int, str, str]] = [
     (1, "campaigns, auth profiles, finding correlation, inventory, telemetry", MIGRATION_1),
     (2, "per-finding verification (finding_verifications)", MIGRATION_2),
     (3, "verification evidence field and versioned conservative classification", MIGRATION_3),
     (4, "operator messages to running agents (agent_messages, scans.control_mode)", MIGRATION_4),
     (5, "analyst notes, evidence labels, correlation reviews, per-scan credential bindings", MIGRATION_5),
+    (6, "user accounts with roles, audit log", MIGRATION_6),
 ]
 
 
@@ -484,7 +519,19 @@ def _migrate_inline_target_auth(c: sqlite3.Connection) -> None:
                   "auth_login_url='', auth_notes='' WHERE id=?", (t["id"],))
 
 
-DATA_MIGRATIONS = {1: _migrate_inline_target_auth}
+def _migrate_admin_account(c: sqlite3.Connection) -> None:
+    """v6: the single admin's generated password hash moves from settings into the built-in users row, so
+    installations without SKYNET_PASSWORD keep their existing login."""
+    from .config import ADMIN_USER
+    row = c.execute("SELECT value FROM settings WHERE key='admin_password_hash'").fetchone()
+    now = now_iso()
+    c.execute("INSERT INTO users (username, role, password_hash, active, builtin, created_at, updated_at, "
+              "password_changed_at) VALUES (?, 'admin', ?, 1, 1, ?, ?, ?)",
+              (ADMIN_USER, row["value"] if row else None, now, now, now if row else None))
+    c.execute("DELETE FROM settings WHERE key='admin_password_hash'")
+
+
+DATA_MIGRATIONS = {1: _migrate_inline_target_auth, 6: _migrate_admin_account}
 
 
 def q(sql: str, args: Iterable[Any] = ()) -> list[dict[str, Any]]:
