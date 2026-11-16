@@ -1,6 +1,29 @@
 # Skynet — çalışma takibi
 
-Güncelleme: 17 Kasım 2026 · Europe/Istanbul (son çalışma: bulgu kartı yeniden tasarımı, SIEM/Syslog main'e alındı)
+Güncelleme: 17 Kasım 2026 · Europe/Istanbul (son çalışma: farklı model ve LiteLLM ile uçtan uca tarama testi)
+
+## Farklı model / LiteLLM testi ve menü düzeltmesi — Claude, 17 Kasım 2026
+
+- [x] “⋯” işlem menüleri `.table-card { overflow: hidden }` içinde kırpılıyordu (ör. LLM bağlantı satırı).
+  Menü açılınca pencereye göre konumlanıyor (CSSOM, CSP uyumlu); altta yer yoksa yukarı açılıyor; Esc, kaydırma
+  ve pencere boyutu değişince kapanıyor. Gerçek uygulamada doğrulandı (`0377157`).
+- [x] Model devralma: Skynet profili `STRIX_LLM`/`LLM_API_KEY`/`LLM_API_BASE` hem ortam değişkeni hem `--config`
+  dosyası olarak veriyor; Strix 1.7 yükleyicisinde ortam değişkeni önce gelir. `~/.strix/cli-config.json` başka
+  model gösterirken Strix'in profil modelini çözdüğü çevrimdışı doğrulandı.
+- [x] OpenRouter · `anthropic/claude-haiku-5.5` (Lokal test hedefi, quick): #19 `MaxTurnsExceeded (3)` ile
+  durdu — kök ajan 3. turda `finish_scan` çağırdığı hâlde sınır aşıldı sayıldı; model hatası değil. #20 (10 tur)
+  **tamamlandı**: 18 istek, hepsi Haiku, hepsi 200; rapor üretildi; Strix maliyeti $0.024.
+- [x] LiteLLM: yerel proxy (1.109.1, `127.0.0.1:4000`, takma ad `haiku-gw` → OpenRouter Haiku, master key).
+  Bağlantı testi: yanlış anahtar → hata, yanlış model → “bulunamadı”, doğru ayar → “available”.
+  #21 **tamamlandı**: Strix `openai/haiku-gw` çözdü; 37 isteğin tamamı `host=127.0.0.1`, 200; proxy günlüğü eşleşiyor.
+- [x] Üç test taraması OpenRouter'da toplam ~$0.27 harcadı. Test bağlantıları ve proxy sonra kaldırıldı;
+  #19–#21 geçmişte duruyor. Varsayılan bağlantı (DeepSeek) değişmedi.
+- [x] Birleşmiş 17 dal (yerel 8, GitHub 9) silindi; yalnız `main` kaldı.
+- LiteLLM takma adlarında (ör. `haiku-gw`) Strix maliyet hesaplayamıyor (“Strix couldn't calculate”); kurum
+  gateway'inde maliyet gateway panelinden izlenmeli. Token sayısı görünüyor.
+- Boş veri klasörüyle ilk açılışta uygulama `~/.strix/cli-config.json` içindeki gerçek LLM anahtarını otomatik
+  profile alıyor (`llm.migrate_from_strix_cli_config`). Demo/QA örneklerinde önce sahte profil oluşturulmalı.
+- Gerçek RHEL/kurum LiteLLM gateway'i (virtual key, DB'li 401 yanıtı, özel CA) ile test yapılmadı.
 
 ## Bulgu kartı ve SIEM/Syslog entegrasyonu — Claude, 17 Kasım 2026
 
