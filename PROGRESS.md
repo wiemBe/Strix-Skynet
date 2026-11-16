@@ -1,6 +1,17 @@
 # Skynet — çalışma takibi
 
-Güncelleme: 15 Kasım 2026 · Europe/Istanbul (son çalışma: RHEL ve tekrar QA)
+Güncelleme: 16 Kasım 2026 · Europe/Istanbul (son çalışma: main üzerinde birleştirme)
+
+## Branch'lerin main üzerinde birleştirilmesi — Codex, 16 Kasım 2026
+
+- [x] Origin yenilendi; çalışma ağacı temizdi. Son Claude commit'i `4f1fef1`
+  (`Add SKY workspace, RHEL deployment and agent tree fixes`) main'e fast-forward ile alındı.
+- [x] Tüm mevcut yerel ve origin feature branch uçlarının bu commit'in geçmişinde bulunduğu doğrulandı;
+  önceki bütçe/turn kararları, paketlenmiş Strix, SKY, RHEL ve görsel QA düzeltmeleri korundu.
+- [x] Birleştirilen uygulama koduyla `.venv/bin/python -m unittest discover -s tests` → **151/151 OK**.
+  app.js/sky.js JavaScript sözdizimi, kurulum shell sözdizimi ve diff kontrolü geçti.
+- Bu işlemde yeni Strix/LLM taraması, deployment veya asıl data/anahtar değişikliği yapılmadı.
+  Önceki RHEL ve özellik kabul sınırları devam ediyor. Feature branch'ler silinmedi.
 
 ## Tekrar görsel QA — Codex, 15 Kasım 2026
 
