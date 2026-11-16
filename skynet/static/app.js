@@ -232,8 +232,30 @@ function pageHead(title, { crumb, lead, meta, actions } = {}) {
 function menu(items, { label = null, title = "More actions" } = {}) {
   const wrap = h("div", { class: "menu-wrap" });
   const box = h("div", { class: "menu", hidden: true, role: "menu" });
-  const close = () => { box.hidden = true; document.removeEventListener("click", outside, true); };
+  // The menu is positioned against the viewport (CSSOM, CSP-safe) so cards with overflow:hidden can't clip it.
+  const close = () => {
+    box.hidden = true;
+    document.removeEventListener("click", outside, true);
+    document.removeEventListener("keydown", onKey, true);
+    window.removeEventListener("scroll", close, true);
+    window.removeEventListener("resize", close);
+  };
   const outside = (e) => { if (!wrap.contains(e.target)) close(); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  const place = () => {
+    const r = trigger.getBoundingClientRect();
+    const w = box.offsetWidth, ht = box.offsetHeight, gap = 4, edge = 8;
+    box.style.left = `${Math.max(edge, Math.min(r.right - w, innerWidth - w - edge))}px`;
+    box.style.top = `${r.bottom + gap + ht <= innerHeight - edge ? r.bottom + gap : Math.max(edge, r.top - gap - ht)}px`;
+  };
+  const open = () => {
+    box.hidden = false;
+    place();
+    document.addEventListener("click", outside, true);
+    document.addEventListener("keydown", onKey, true);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+  };
   const visible = items.filter((it) => it && (it === "-" || can(it.need || LABEL_NEEDS[it.label] || "viewer")))
     .filter((it, i, a) => it !== "-" || (i > 0 && a[i - 1] !== "-" && i < a.length - 1));
   if (!visible.length) return h("span", { class: "menu-wrap" });
@@ -243,7 +265,7 @@ function menu(items, { label = null, title = "More actions" } = {}) {
   }
   const trigger = button(label, { ic: label ? null : "more", title, kind: label ? "" : "", onclick: (e) => {
     e.stopPropagation();
-    if (box.hidden) { box.hidden = false; document.addEventListener("click", outside, true); } else close();
+    if (box.hidden) open(); else close();
   } });
   wrap.append(trigger, box);
   return wrap;

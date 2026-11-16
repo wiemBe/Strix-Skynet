@@ -100,7 +100,7 @@ svg.i { width: 16px; height: 16px; flex-shrink: 0; stroke: currentColor; fill: n
 
 /* ================= menu ================= */
 .menu-wrap { position: relative; display: inline-flex; }
-.menu { position: absolute; right: 0; top: calc(100% + 4px); min-width: 200px; background: var(--raised); border: 1px solid var(--border-strong); border-radius: var(--r-lg); box-shadow: var(--shadow-pop); padding: 4px; z-index: 40; }
+.menu { position: fixed; min-width: 200px; background: var(--raised); border: 1px solid var(--border-strong); border-radius: var(--r-lg); box-shadow: var(--shadow-pop); padding: 4px; z-index: 40; }
 .menu button, .menu a { display: flex; align-items: center; gap: 8px; width: 100%; height: 34px; padding: 0 10px; border: 0; background: none; color: var(--text); font: inherit; text-align: left; border-radius: var(--r); cursor: pointer; white-space: nowrap; }
 .menu button:hover, .menu a:hover { background: var(--hover); text-decoration: none; }
 .menu .danger { color: var(--danger); }
