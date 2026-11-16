@@ -1,5 +1,9 @@
 # Claude'a devir — Skynet
 
+> **Main entegrasyonu (16 Kasım):** `4f04aa2` Claude özellikleri ve `00275fc` düzeltme/Nginx commit'i
+> main'e fast-forward alındı; 191 test geçti. Geçmiş korunuyor, branch'ler silinmedi. Alttaki “commit/merge/push yok”
+> notları önceki QA aşamalarının kaydıdır. Gerçek RHEL host kurulumu ve uzak istemci kabulü hâlâ bekliyor.
+
 > **Güncel: aynı sunucuda Nginx/IP erişimi (16 Kasım).** [Kurulum](NGINX.md),
 > [191 test ve gerçek Nginx QA](qa/2026-11-16-nginx/README.md). Dry-run/--apply kurucu hazır.
 > Nginx IP:80/443 → Skynet 127.0.0.1:8787; HTTP/HTTPS ve CIDR allowlist. Asıl servis/taramalar restart edilmedi.

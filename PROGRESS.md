@@ -1,6 +1,16 @@
 # Skynet — çalışma takibi
 
-Güncelleme: 16 Kasım 2026 · Europe/Istanbul (son çalışma: aynı RHEL sunucusunda Nginx/IP erişimi hazırlığı)
+Güncelleme: 16 Kasım 2026 · Europe/Istanbul (son çalışma: düzeltmeler ve Nginx'in main'e birleştirilmesi)
+
+## Main entegrasyonu — Codex, 16 Kasım 2026
+
+- [x] Origin yenilendi; yeni uzak değişiklik yoktu. Claude'un `4f04aa2` kullanıcı/rol/audit/rapor commit'i korundu.
+- [x] `00275fc` commit'i: R1–R5 düzeltmeleri, görsel QA, migration 7 ve aynı sunucu Nginx kurulum/QA dosyaları.
+- [x] `users-roles-audit-report` branch'i main'e çakışmasız fast-forward alındı; geçmiş yeniden yazılmadı.
+- [x] Main'e alınan aynı uygulama koduyla **191/191 test OK**; JS, shell ve staged diff kontrolü geçti.
+- [x] Mevcut yerel/origin branch uçlarının main geçmişinde bulunduğu doğrulandı. Branch'ler silinmedi.
+- Gerçek RHEL sunucusu hâlâ verilmedi; Nginx host kurulumu/deployment yapılmadı. Asıl DB/anahtar ve taramalar
+  değiştirilmedi. Aşağıdaki “commit/push yapılmadı” ifadeleri ilgili QA adımlarının tarihsel durumudur.
 
 ## Aynı sunucuda Nginx / IP ile erişim — 16 Kasım 2026
 
