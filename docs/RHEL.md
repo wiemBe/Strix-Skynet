@@ -103,8 +103,11 @@ sudo -u skynet -g docker /opt/skynet/.venv/bin/python /opt/skynet/scripts/doctor
 ```
 
 Doctor DB'yi salt okunur açar; migration yapmaz, anahtar oluşturmaz ve pentest başlatmaz.
-Mevcut DB ayarları ortam varsayılanlarına göre önceliklidir: eski `strix_bin` yolu varsa bunu gizlemez.
-Yukarıdaki relocate aracıyla düzeltin. Özel Docker endpoint/CA yapılandırması kullanıyorsanız aynı değişkenleri
+Mevcut DB'deki dolu yollar manuel override olarak önceliklidir: eski `strix_bin` yolu varsa bunu gizlemez.
+Settings'te **Use automatic paths → Save** ile otomatiğe dönebilirsiniz; çıktı dosyaları da taşınacaksa
+yukarıdaki relocate aracını kullanın. Boş kayıtlı yollar için Doctor ve uygulama aynı otomatik keşfi kullanır
+(ortam, paketlenmiş runtime, kullanıcı kurulumu, PATH; workdir için servis kullanıcısının yazılabilir home dizini).
+Özel Docker endpoint/CA yapılandırması kullanıyorsanız aynı değişkenleri
 doctor sürecine de güvenli biçimde aktarın; anahtar/parolaları komut satırına yazmayın.
 
 ```sh

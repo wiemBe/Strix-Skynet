@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import importlib.metadata
+import importlib.util
 import json
 import os
 import platform
@@ -25,6 +26,17 @@ def settings_of(path: Path) -> dict[str, str]:
     with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as c:
         tables = {r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         return dict(c.execute("SELECT key,value FROM settings WHERE key IN ('strix_bin','strix_workdir')")) if "settings" in tables else {}
+
+
+def runtime_paths(settings: dict[str, str], args) -> dict[str, str]:
+    # Load only this pure stdlib helper: importing Skynet's configuration would create data directories.
+    root = Path(__file__).resolve().parent.parent
+    spec = importlib.util.spec_from_file_location("skynet_runtime_paths", root / "skynet/runtime_paths.py")
+    resolver = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(resolver)
+    return resolver.resolve({"strix_bin": settings.get("strix_bin") or args.strix or "",
+                             "strix_workdir": settings.get("strix_workdir") or args.workdir or ""},
+                            project_dir=root, data_dir=args.data)
 
 
 def key_check(database: Path, key_file: Path, key_env: str = "") -> tuple[bool, str]:
@@ -94,7 +106,8 @@ def check(args) -> dict:
         settings = settings_of(database)
     except sqlite3.Error:
         add("database_read", lambda: (False, "Existing database could not be opened read-only."))
-    binary = settings.get("strix_bin") or args.strix or str(Path(__file__).resolve().parent.parent / ".strix-runtime/bin/strix")
+    paths = runtime_paths(settings, args)
+    binary = paths["strix_bin"]
     runtime = args.runtime
     def binary_check():
         version = probe([str(Path(binary).expanduser()), "--version"])
@@ -110,7 +123,7 @@ def check(args) -> dict:
         key_file = legacy
     add("encryption", lambda: key_check(database, key_file, os.environ.get("SKYNET_SECRET_KEY", "")))
     for name, path in (("data", args.data), ("key_directory", key_file.parent),
-                       ("workdir", Path(settings.get("strix_workdir") or args.workdir or args.data / "work").expanduser())):
+                       ("workdir", Path(paths["strix_workdir"]))):
         def writable(p=path):
             while not p.exists() and p != p.parent:
                 p = p.parent

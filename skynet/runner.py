@@ -233,7 +233,7 @@ def _launch(scan: dict[str, Any], settings: dict[str, str]) -> None:
         return _fail(sid, f"Authentication profile unavailable: {e}")
     workdir = Path(settings["strix_workdir"]).expanduser()
     runs.runs_root(str(workdir)).mkdir(parents=True, exist_ok=True)
-    profile_env = llm.strix_env(profile)
+    profile_env = llm.strix_env(profile, session_id=llm.scan_session_id(scan) if profile["provider"] == "opencode_go" else None)
     child_env = _child_env(profile_env, settings)
     cfg_path = RUNTIME_DIR / f"scan_{sid}.json"
     _write_private(cfg_path, json.dumps({"env": {k: child_env[k] for k in (*profile_env, "STRIX_TELEMETRY")}}))
@@ -241,6 +241,8 @@ def _launch(scan: dict[str, Any], settings: dict[str, str]) -> None:
     # Auth: secret values go into 0600 workspace files (never the instruction); masks snapshot the values used so
     # redaction survives a later profile rotation/deletion. Pre-checks are Skynet's own, separate from the scan.
     auth_section, wfiles, masks = vault.render(profiles, RUNTIME_DIR, sid)
+    if profile_env.get("LLM_API_KEY") and profile_env["LLM_API_KEY"] != "no-key":
+        masks.append(profile_env["LLM_API_KEY"])
     masks += vault.masking_values({**scan, "run_name": scan.get("resume_run") or scan.get("run_name")})
     auth_checks = _auth_precheck(profiles, target)
 
@@ -279,7 +281,9 @@ def _launch(scan: dict[str, Any], settings: dict[str, str]) -> None:
     auth_snapshot = vault.global_redactor().obj(verify.profile_snapshot(profiles), True)
     # Make the masking snapshot durable before any child output becomes readable.
     # A resumed run can still contain credentials from earlier launches.
-    db.update("scans", sid, {"redact_enc": crypto.vault_encrypt(json.dumps(sorted(set(masks)))) if masks else "",
+    db.update("scans", sid, {"model": profile_env["STRIX_LLM"], "llm_provider": profile["provider"],
+                             "llm_profile_name": profile["name"],
+                             "redact_enc": crypto.vault_encrypt(json.dumps(sorted(set(masks)))) if masks else "",
                              "auth_checks": auth_checks, "auth_snapshot": auth_snapshot})
 
     log_path = LOG_DIR / f"scan_{sid}.log"

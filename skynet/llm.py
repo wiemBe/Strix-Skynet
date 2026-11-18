@@ -1,4 +1,4 @@
-"""LLM connection profiles (OpenRouter / LiteLLM) mapped onto Strix's own env-var mechanism.
+"""LLM connection profiles mapped onto Strix's own env-var mechanism.
 
 Strix uses LiteLLM internally and is configured with STRIX_LLM / LLM_API_KEY / LLM_API_BASE
 (https://docs.strix.ai/advanced/configuration). This module only translates a stored profile into
@@ -6,18 +6,26 @@ those variables; it never proxies LLM traffic and never falls back to another pr
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
+import secrets
 import ssl
 import urllib.error
 import urllib.request
 from typing import Any
 
-from . import crypto, db
+from . import crypto, db, redact
+
+OPENCODE_GO_BASE = "https://opencode.ai/inference/go/openai/v1"
+OPENCODE_USER_AGENT = "Skynet-Strix/1.0"
 
 PROVIDERS = {
     "openrouter": {"label": "OpenRouter", "prefix": "openrouter/", "default_base": "https://openrouter.ai/api/v1"},
     # Documented pattern for OpenAI-compatible gateways: openai/<model> + LLM_API_BASE.
     "litellm": {"label": "LiteLLM", "prefix": "openai/", "default_base": ""},
+    "opencode_go": {"label": "OpenCode Go", "prefix": "openai/", "default_base": OPENCODE_GO_BASE,
+                    "default_api_type": "chat_completions"},
 }
 API_TYPES = ("", "chat_completions", "responses")
 EFFORTS = ("", "none", "minimal", "low", "medium", "high", "xhigh", "max")
@@ -29,6 +37,7 @@ LLM_ENV_DENYLIST = (
     "OLLAMA_API_BASE", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY", "STRIX_API_TYPE",
     "STRIX_FORCE_API", "STRIX_REASONING_EFFORT", "LLM_EXTRA_HEADERS", "LLM_EXTRA_BODY",
     "STRIX_DEDUPE_MODEL", "DEDUPE_LLM_API_KEY", "DEDUPE_LLM_API_BASE",
+    "DEDUPE_LLM_EXTRA_HEADERS", "OPENCODE_API_KEY", "OPENCODE_GO_API_KEY", "OPENCODE_ZEN_API_KEY",
 )
 
 
@@ -59,11 +68,28 @@ def set_default(pid: int) -> None:
 
 def strix_model(p: dict[str, Any]) -> str:
     model = (p.get("model") or "").strip()
+    if p.get("provider") == "opencode_go":
+        model = model.removeprefix("opencode-go/")
     prefix = PROVIDERS.get(p.get("provider", ""), {}).get("prefix", "")
     return model if not prefix or model.startswith(prefix) else prefix + model
 
 
-def strix_env(p: dict[str, Any]) -> dict[str, str]:
+def scan_session_id(scan: dict[str, Any]) -> str:
+    """Stable, installation-scoped routing id; a resumed run keeps its original session."""
+    sid = scan["id"]
+    if scan.get("resume_run"):
+        first = db.q1("SELECT MIN(id) AS id FROM scans WHERE run_name=?", (scan["resume_run"],))
+        if first and first["id"] is not None:
+            sid = first["id"]
+    digest = hmac.new(crypto.derive("opencode-go-session-v1"), str(sid).encode(), hashlib.sha256).hexdigest()
+    return "ses_skynet_" + digest
+
+
+def _go_headers(session_id: str) -> dict[str, str]:
+    return {"User-Agent": OPENCODE_USER_AGENT, "x-opencode-session": session_id}
+
+
+def strix_env(p: dict[str, Any], *, session_id: str | None = None) -> dict[str, str]:
     env = {"STRIX_LLM": strix_model(p)}
     key = crypto.decrypt_strict(p.get("api_key_enc"))
     if key:
@@ -71,10 +97,19 @@ def strix_env(p: dict[str, Any]) -> dict[str, str]:
     elif p.get("provider") == "litellm":
         # Strix's OpenAI client refuses to start without a key even if the gateway needs none.
         env["LLM_API_KEY"] = "no-key"
-    if (p.get("base_url") or "").strip():
-        env["LLM_API_BASE"] = p["base_url"].strip().rstrip("/")
-    if p.get("api_type"):
-        env["STRIX_API_TYPE"] = p["api_type"]
+    provider = PROVIDERS.get(p.get("provider"), {})
+    base = (p.get("base_url") or provider.get("default_base") or "").strip().rstrip("/")
+    if base:
+        env["LLM_API_BASE"] = base
+    api_type = p.get("api_type") or provider.get("default_api_type")
+    if api_type:
+        env["STRIX_API_TYPE"] = api_type
+    if p.get("provider") == "opencode_go":
+        if not key:
+            raise ValueError("OpenCode Go requires an API key.")
+        if not session_id:
+            raise ValueError("OpenCode Go requires a scan session ID.")
+        env["LLM_EXTRA_HEADERS"] = json.dumps(_go_headers(session_id))
     if p.get("reasoning_effort"):
         env["STRIX_REASONING_EFFORT"] = p["reasoning_effort"]
     if p.get("ca_cert_path"):
@@ -99,19 +134,20 @@ def migrate_from_strix_cli_config(cfg: dict[str, Any]) -> None:
 
 # ---------------------------------------------------------------- connection test / model list
 def _scrub(text: str, key: str) -> str:
-    return text.replace(key, "***") if key else text
+    return redact.Redactor([key] if key else []).text(text, strict=True)
 
 
-def _get(url: str, key: str, cafile: str | None) -> Any:
+def _get(url: str, key: str, cafile: str | None, extra_headers: dict[str, str] | None = None) -> Any:
     headers = {"User-Agent": "skynet", "Accept": "application/json"}
     if key:
         headers["Authorization"] = f"Bearer {key}"
+    headers.update(extra_headers or {})
     ctx = ssl.create_default_context(cafile=cafile) if cafile else None
     with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=15, context=ctx) as r:
         return json.loads(r.read().decode() or "{}")
 
 
-def test(p: dict[str, Any], key_override: str | None = None) -> dict[str, Any]:
+def test(p: dict[str, Any], key_override: str | None = None, *, catalog_only: bool = False) -> dict[str, Any]:
     key = key_override if key_override is not None else crypto.decrypt_strict(p.get("api_key_enc"))
     provider = p.get("provider")
     base = (p.get("base_url") or PROVIDERS.get(provider, {}).get("default_base") or "").rstrip("/")
@@ -120,7 +156,7 @@ def test(p: dict[str, Any], key_override: str | None = None) -> dict[str, Any]:
         return {"ok": False, "message": "Base URL is required.", "models": []}
     result: dict[str, Any] = {"ok": False, "models": [], "message": ""}
     try:
-        if provider == "openrouter":
+        if provider == "openrouter" and not catalog_only:
             info = (_get(base + "/key", key, cafile) or {}).get("data") or {}
             usage, limit = info.get("usage"), info.get("limit")
             msg = "API key is valid."
@@ -128,6 +164,19 @@ def test(p: dict[str, Any], key_override: str | None = None) -> dict[str, Any]:
                 msg += f" Usage: ${usage:.2f}" + (f" / limit ${limit}" if limit else "")
             result["message"] = msg
             data = _get(base + "/models", "", cafile)
+        elif provider == "openrouter":
+            data = _get(base + "/models", "", cafile)
+            result.update(check_type="catalog", key_verified=False,
+                          message="OpenRouter model catalogue loaded. Listed models do not verify your key or account access.")
+        elif provider == "opencode_go":
+            if not key:
+                return {"ok": False, "models": [], "message": "OpenCode Go requires an API key."}
+            # The model catalogue lives outside the OpenAI protocol path. Keep a custom origin rather
+            # than silently sending its credential to a different host or the pay-as-you-go service.
+            models = base[:-len("/openai/v1")] + "/v1/models" if base.endswith("/openai/v1") else base + "/models"
+            data = _get(models, key, cafile, _go_headers("ses_skynet_check_" + secrets.token_hex(16)))
+            result.update(check_type="catalog", key_verified=False,
+                          message="OpenCode Go model catalogue is reachable. This check does not verify inference access, API key validity or Go allowance.")
         else:
             try:
                 data = _get(base + "/models", key, cafile)
@@ -137,16 +186,21 @@ def test(p: dict[str, Any], key_override: str | None = None) -> dict[str, Any]:
                 data = _get(base + "/v1/models", key, cafile)
             result["message"] = "Gateway is reachable."
     except urllib.error.HTTPError as e:
-        body = _scrub(e.read().decode(errors="replace")[:300], key)
+        with e:
+            body = _scrub(e.read().decode(errors="replace"), key)[:300]
         return {"ok": False, "message": f"HTTP {e.code}: {body}", "models": []}
     except urllib.error.URLError as e:
         return {"ok": False, "message": _scrub(f"Could not connect to server ({base}): {e.reason}", key), "models": []}
     except (TimeoutError, ValueError, ssl.SSLError, OSError) as e:
         return {"ok": False, "message": _scrub(f"Connection error: {e}", key), "models": []}
-    ids = sorted({m.get("id") for m in (data or {}).get("data") or [] if isinstance(m, dict) and m.get("id")})
+    if not isinstance(data, dict) or not isinstance(data.get("data"), list):
+        return {"ok": False, "models": [], "message": "Provider returned an invalid model list."}
+    ids = sorted({m["id"] for m in data["data"] if isinstance(m, dict) and isinstance(m.get("id"), str) and m["id"]})
     result["ok"] = True
     result["models"] = ids
-    model = (p.get("model") or "").strip()
+    model = "" if catalog_only else (p.get("model") or "").strip()
+    if provider == "opencode_go":
+        model = model.removeprefix("opencode-go/")
     prefix = PROVIDERS.get(provider, {}).get("prefix", "")
     bare = model[len(prefix):] if prefix and model.startswith(prefix) else model
     if ids and bare:

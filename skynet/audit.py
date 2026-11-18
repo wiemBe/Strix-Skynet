@@ -76,6 +76,7 @@ RULES: list[Rule] = [
     _r("POST", "/api/llm-profiles/{id}/default", "admin", "llm_profile.make_default", "llm_profile"),
     _r("DELETE", "/api/llm-profiles/{id}", "admin", "llm_profile.delete", "llm_profile"),
     _r("POST", "/api/llm-profiles/test", "admin", "llm_profile.test", audit=False),
+    _r("POST", "/api/llm-profiles/models", "admin", "llm_profile.models", audit=False),
     _r("POST", "/api/auth-profiles", "admin", "auth_profile.create", "auth_profile"),
     _r("PUT", "/api/auth-profiles/{id}", "admin", "auth_profile.update", "auth_profile"),
     _r("POST", "/api/auth-profiles/{id}/assign", "admin", "auth_profile.assign", "auth_profile"),

@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,7 +18,7 @@ from markdown_it import MarkdownIt
 
 from . import (activity, audit, auth, browser, campaigns, compare, control, coverage_matrix, crypto, db, findings_store, inventory,
                llm, report, runner, runs, scheduler, session_health, siem, targets, telemetry, timeline, vault, verify, workspace)
-from .config import COOKIE_SECURE, LOG_DIR, SESSION_HOURS, STATIC_DIR, TIMEZONE, USER_STRIX_CONFIG
+from .config import COOKIE_SECURE, DATA_DIR, LOG_DIR, PROJECT_DIR, SESSION_HOURS, STATIC_DIR, TIMEZONE, USER_STRIX_CONFIG
 
 
 class _RedactAccessLog(logging.Filter):
@@ -369,9 +370,14 @@ def _llm_payload(body: dict[str, Any], existing: dict[str, Any] | None = None) -
     name = (body.get("name") or "").strip() or bad("Profile name is required")
     provider = body.get("provider")
     if provider not in llm.PROVIDERS:
-        bad("Provider must be OpenRouter or LiteLLM")
+        bad("Select a supported LLM provider")
     model = (body.get("model") or "").strip() or bad("Model is required")
     base = (body.get("base_url") or "").strip()
+    if provider == "opencode_go":
+        base = base or llm.OPENCODE_GO_BASE
+        model = model.removeprefix("opencode-go/").removeprefix("openai/")
+        if not model:
+            bad("Model is required")
     if provider == "litellm" and not base:
         bad("LiteLLM requires a base URL (e.g. http://litellm.internal:4000)")
     if base and urlparse(base).scheme not in ("http", "https"):
@@ -383,13 +389,16 @@ def _llm_payload(body: dict[str, Any], existing: dict[str, Any] | None = None) -
         bad(f"CA certificate file not found: {ca}")
     out = {"name": name, "provider": provider, "model": model, "base_url": base, "api_type": body.get("api_type", ""),
            "reasoning_effort": body.get("reasoning_effort", ""), "ca_cert_path": ca}
-    key = body.get("api_key")
+    key = str(body.get("api_key") or "").strip()
     if key:  # empty = keep the stored key
-        out["api_key_enc"] = crypto.encrypt(str(key).strip())
+        out["api_key_enc"] = crypto.encrypt(key)
     elif body.get("clear_api_key"):
         out["api_key_enc"] = ""
-    elif not existing and provider == "openrouter":
-        bad("OpenRouter requires an API key")
+    if existing and existing["provider"] != provider and existing.get("api_key_enc") and not key and not body.get("clear_api_key"):
+        bad("Re-enter the API key when changing the provider.")
+    if provider in ("openrouter", "opencode_go") and not (out.get("api_key_enc") or
+            (existing or {}).get("api_key_enc") and not body.get("clear_api_key")):
+        bad(f"{llm.PROVIDERS[provider]['label']} requires an API key")
     return out
 
 
@@ -447,16 +456,39 @@ def llm_delete(pid: int) -> dict[str, bool]:
     return {"ok": True}
 
 
-@app.post("/api/llm-profiles/test")
-def llm_test(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    """Test a (possibly unsaved) profile form. Uses the stored key when the form leaves it empty."""
+def _llm_form_connection(body: dict[str, Any], *, catalog_only: bool = False):
+    """Resolve form credentials without exposing them or reusing them across providers."""
     stored = llm.get(int(body["id"])) if body.get("id") else None
     p = {"provider": body.get("provider"), "base_url": body.get("base_url", ""), "model": body.get("model", ""),
          "ca_cert_path": body.get("ca_cert_path", "")}
     if p["provider"] not in llm.PROVIDERS:
         bad("Select a provider")
-    key = body.get("api_key") or (crypto.decrypt_strict(stored.get("api_key_enc")) if stored else "")
+    submitted_key = str(body.get("api_key") or "").strip()
+    if not catalog_only and stored and stored["provider"] != p["provider"] and stored.get("api_key_enc") and not submitted_key:
+        bad("Enter the API key for the selected provider before testing.")
+    use_stored = bool(stored)
+    if catalog_only and stored:
+        default = llm.PROVIDERS[p["provider"]]["default_base"]
+        # Automatic lookups must not send a saved credential to a freshly typed URL.
+        use_stored = (stored["provider"] == p["provider"] and
+                      (stored.get("base_url") or default).strip().rstrip("/") ==
+                      (p.get("base_url") or default).strip().rstrip("/"))
+    if catalog_only and p["provider"] == "openrouter":
+        use_stored = False  # the public catalogue does not need an encrypted credential at all
+    key = submitted_key or (crypto.decrypt_strict(stored.get("api_key_enc")) if use_stored else "")
+    return p, key
+
+
+@app.post("/api/llm-profiles/test")
+def llm_test(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    p, key = _llm_form_connection(body)
     return llm.test(p, key_override=key)
+
+
+@app.post("/api/llm-profiles/models")
+def llm_models(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    p, key = _llm_form_connection(body, catalog_only=True)
+    return llm.test(p, key_override=key, catalog_only=True)
 
 
 # ---------------------------------------------------------------- targets
@@ -988,6 +1020,8 @@ SETTINGS_KEYS = ("strix_bin", "strix_workdir", "max_concurrent", "default_scan_m
 def settings_get() -> dict[str, Any]:
     st = db.get_settings()
     out: dict[str, Any] = {k: st.get(k, "") for k in SETTINGS_KEYS}
+    out.update({key + suffix: st[key + suffix] for key in ("strix_bin", "strix_workdir")
+                for suffix in ("_override", "_source", "_auto")})
     out.update(timezone=TIMEZONE, password_from_env=auth.password_from_env(),
                has_api_token=bool(st.get("api_token_enc")),
                key_status=crypto.key_status(), schema_version=db.schema_version(),
@@ -1004,10 +1038,18 @@ def settings_put(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
             vals["max_concurrent"] = str(max(1, min(10, int(vals["max_concurrent"]))))
         except (TypeError, ValueError):
             bad("Concurrent scans must be between 1 and 10")
-    if "strix_bin" in vals and not Path(str(vals["strix_bin"])).expanduser().is_file():
-        bad(f"Strix binary not found: {vals['strix_bin']}")
-    if "strix_workdir" in vals and not Path(str(vals["strix_workdir"])).expanduser().is_dir():
-        bad(f"Working folder not found: {vals['strix_workdir']}")
+    from . import runtime_paths
+    for key in ("strix_bin", "strix_workdir"):
+        if key in vals:
+            vals[key] = str(vals[key] or "").strip()
+    resolved = runtime_paths.resolve({k: str(vals.get(k) or "") for k in ("strix_bin", "strix_workdir")},
+                                     project_dir=PROJECT_DIR, data_dir=DATA_DIR)
+    if vals.get("strix_bin") and not (Path(resolved["strix_bin"]).is_file() and os.access(resolved["strix_bin"], os.X_OK)):
+        bad(f"Strix binary must be an executable file: {vals['strix_bin']}")
+    if vals.get("strix_workdir") and not (Path(resolved["strix_workdir"]).is_dir() and os.access(resolved["strix_workdir"], os.W_OK | os.X_OK)):
+        bad(f"Working folder must be an existing writable directory: {vals['strix_workdir']}")
+    if "strix_workdir" in vals and resolved["strix_workdir"] != db.get_settings()["strix_workdir"] and db.list_scans(status="running,stopping", limit=1):
+        bad("Wait for running scans to finish before changing the working folder.")
     if vals.get("default_scan_mode", "standard") not in SCAN_MODES:
         bad("Invalid scan mode")
     if "agent_messaging" in vals:

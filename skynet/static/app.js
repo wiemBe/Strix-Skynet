@@ -504,7 +504,7 @@ function scanOptions(profiles, init) {
   const llmHelp = h("div", { class: "help" });
   const upd = () => {
     const p = profiles.find((x) => String(x.id) === f.llm_profile_id.value);
-    llmHelp.textContent = !p ? "" : (p.provider === "openrouter" ? `Model: ${p.strix_model}. Scan content goes to the selected provider via OpenRouter.` : `Model: ${p.strix_model}. Content goes to the in-house gateway (${p.base_url}).`) + " On error it does not switch to another connection.";
+    llmHelp.textContent = !p ? "" : (p.provider === "openrouter" ? `Model: ${p.strix_model}. Scan content goes to the selected provider via OpenRouter.` : p.provider === "opencode_go" ? `Model: ${p.strix_model}. Scan content goes to OpenCode Go (${p.base_url}). Limits and extra usage follow your OpenCode account settings.` : `Model: ${p.strix_model}. Content goes to the configured gateway (${p.base_url}).`) + " On error it does not switch to another connection.";
   };
   f.llm_profile_id.addEventListener("change", upd); upd();
   const fields = [
@@ -735,7 +735,7 @@ async function viewScan(id) {
       fact("Started", fmtDateSec(scan.started_at)),
       fact("Duration", ACTIVE.includes(scan.status) && scan.status !== "queued" ? `${durationText(scan)} (ongoing)` : durationText(scan)),
       fact("Model", h("span", { class: "mono" }, scan.model || "—")),
-      fact("LLM connection", scan.llm_profile_name ? `${scan.llm_profile_name} · ${scan.llm_provider === "litellm" ? "LiteLLM" : "OpenRouter"}` : "—"),
+      fact("LLM connection", scan.llm_profile_name ? `${scan.llm_profile_name} · ${{litellm: "LiteLLM", openrouter: "OpenRouter", opencode_go: "OpenCode Go"}[scan.llm_provider] || scan.llm_provider}` : "—"),
       fact("Scan mode", MODE_TR[scan.scan_mode] || scan.scan_mode || "—"),
       fact("Started by", TRIGGER_TR[scan.trigger] || scan.trigger),
       fact("LLM cost", cost ? `$${Number(cost) < 0.01 ? Number(cost).toFixed(4) : Number(cost).toFixed(2)}` : h("span", { class: "faint" }, "Not reported by Strix"), cost ? null : "When Strix doesn't know the model price it writes cost as 0"),
@@ -1296,8 +1296,8 @@ async function viewSettings() {
   }
   const [st, profiles, users, siem] = await Promise.all([api("/api/settings"), api("/api/llm-profiles"), api("/api/users"), api("/api/syslog")]);
   const f = {
-    strix_bin: h("input", { type: "text", value: st.strix_bin, class: "mono" }),
-    strix_workdir: h("input", { type: "text", value: st.strix_workdir, class: "mono" }),
+    strix_bin: h("input", { type: "text", value: st.strix_bin_override || "", placeholder: st.strix_bin_auto, class: "mono" }),
+    strix_workdir: h("input", { type: "text", value: st.strix_workdir_override || "", placeholder: st.strix_workdir_auto, class: "mono" }),
     max_concurrent: h("input", { type: "number", min: "1", max: "10", value: st.max_concurrent }),
     default_scan_mode: select([["quick", "Quick"], ["standard", "Standard"], ["deep", "Deep"]], st.default_scan_mode),
     telemetry: h("input", { type: "checkbox", checked: st.telemetry === "1" }),
@@ -1306,7 +1306,7 @@ async function viewSettings() {
   };
   const saveRuntime = guard(async () => {
     await api("/api/settings", { method: "PUT", body: Object.fromEntries(Object.entries(f).map(([k, el]) => [k, el.type === "checkbox" ? el.checked : el.value])) });
-    toast("Settings saved"); refreshSystem();
+    toast("Settings saved"); router(); refreshSystem();
   });
   const llmRows = profiles.map((p) => h("tr", {},
     h("td", {}, h("div", { class: "cell-clip" }, h("div", { class: "primary-line" }, p.name, p.is_default ? [" ", h("span", { class: "tag accent" }, "Default")] : null),
@@ -1315,9 +1315,10 @@ async function viewSettings() {
     h("td", {}, p.has_api_key ? "Stored" : h("span", { class: "faint" }, "None")),
     h("td", {}, p.used_by_schedules ? `${p.used_by_schedules} schedules` : h("span", { class: "faint" }, "—")),
     h("td", { class: "shrink right" }, h("div", { class: "actions" },
+      button("Change model", { size: "sm", ic: "edit", onclick: () => llmDialog(p, true) }),
       button("Test", { size: "sm", onclick: guard(async () => {
         const r = await api("/api/llm-profiles/test", { method: "POST", body: { id: p.id, provider: p.provider, base_url: p.base_url, model: p.model, ca_cert_path: p.ca_cert_path } });
-        toast((r.ok ? "Connection OK. " : "Connection failed. ") + r.message, !r.ok || r.model_found === false);
+        toast((r.ok ? (r.check_type === "catalog" ? "Model catalogue loaded. " : "Connection OK. ") : "Connection failed. ") + r.message, !r.ok || r.model_found === false);
       }) }),
       menu([!p.is_default ? { label: "Make default", icon: "check", onclick: guard(async () => { await api(`/api/llm-profiles/${p.id}/default`, { method: "POST" }); router(); refreshSystem(); }) } : null,
         { label: "Edit", icon: "edit", onclick: () => llmDialog(p) }, "-",
@@ -1339,7 +1340,7 @@ async function viewSettings() {
       health(true, "Scheduling", `Time zone ${o.timezone}`, `Strix telemetry ${o.telemetry ? "on" : "off"} · concurrency limit ${o.max_concurrent}`))),
     section("LLM connections", h("div", {},
       h("div", { class: "table-card" }, table([{ label: "Connection" }, { label: "Provider" }, { label: "API key" }, { label: "Usage" }, { label: "", cls: "shrink" }], llmRows,
-        emptyState("No LLM connection", "Add an OpenRouter or in-house LiteLLM connection for scans.", [button("Add connection", { kind: "primary", ic: "plus", onclick: () => llmDialog(null) })]))),
+        emptyState("No LLM connection", "Add an OpenRouter, OpenCode Go or LiteLLM connection for scans.", [button("Add connection", { kind: "primary", ic: "plus", onclick: () => llmDialog(null) })]))),
       h("div", { class: "note", style: null }, "Connections are passed to Strix via the STRIX_LLM, LLM_API_KEY and LLM_API_BASE environment variables. API keys are stored encrypted on the server and never sent to the browser.")),
     { right: button("Add connection", { ic: "plus", size: "sm", onclick: () => llmDialog(null) }) }),
     section("Data protection", h("div", { class: "card card-pad" },
@@ -1352,9 +1353,13 @@ async function viewSettings() {
           h("strong", {}, `Version ${m.version}`), " · ", fmtDate(m.applied_at),
           m.backup ? h("div", { class: "secondary-line mono", title: m.backup }, `Backup: ${m.backup}`) : h("div", { class: "faint" }, "No backup recorded by this migration"))))))),
     section("Strix runtime environment", h("form", { class: "card card-pad form", onsubmit: (e) => { e.preventDefault(); saveRuntime(); } },
-      formSection("Strix", "Installed Strix CLI and output folder.", [
-        field("Strix binary", f.strix_bin),
-        field("Working folder", f.strix_workdir, "Strix writes output under <folder>/strix_runs/. Scans run with the TUI are also imported from here.")]),
+      formSection("Strix", "Paths are selected automatically. Enter a path to override either setting.", [
+        field("Strix binary", f.strix_bin, `Leave empty for automatic selection: ${st.strix_bin_auto}. Current source: ${st.strix_bin_source}.`),
+        field("Working folder", f.strix_workdir, `Leave empty for automatic selection: ${st.strix_workdir_auto}. Current source: ${st.strix_workdir_source}. Output is saved under <folder>/strix_runs/. Existing TUI runs are imported from this folder.`),
+        button("Use automatic paths", { size: "sm", onclick: () => {
+          f.strix_bin.value = ""; f.strix_workdir.value = "";
+          toast("Automatic paths selected. Save to apply.");
+        } })]),
       formSection("Execution", "Queue and defaults.", [
         h("div", { class: "field-row two" }, field("Concurrent scans", f.max_concurrent, "The rest wait in the queue. Only one scan runs on the same target at a time."), field("Default mode", f.default_scan_mode)),
         h("div", { class: "field" }, h("div", { class: "label" }, "Strix telemetry"), h("label", { class: "check" }, f.telemetry, "Telemetry on (STRIX_TELEMETRY=1)"),
@@ -1447,53 +1452,140 @@ function syslogSettingsSection(initial) {
   return section("SIEM / Syslog", form);
 }
 
-function llmDialog(p) {
+// Catalogue requests can outlive a form, a provider change or another request.
+function modelCatalogue(fetchModels, update, choose, currentModel) {
+  let generation = 0, disposed = false;
+  const publish = (state) => { if (!disposed) update(state); };
+  return {
+    invalidate(message = "Connection changed. Models will reload when the connection details are ready.") {
+      generation++; publish({models: [], loading: false, message});
+    },
+    dispose() { disposed = true; generation++; },
+    async load(payload, fullTest = false) {
+      if (disposed) return;
+      const request = ++generation;
+      publish({models: [], loading: true, message: "Loading models…"});
+      try {
+        const result = await fetchModels(payload, fullTest);
+        if (disposed || generation !== request) return;
+        const models = result.ok ? [...new Set((result.models || []).filter(m => typeof m === "string" && m))].sort() : [];
+        if (models.length === 1 && !currentModel().trim()) choose(models[0]);
+        publish({models, loading: false, message: result.message, result, fullTest});
+      } catch (error) {
+        if (disposed || generation !== request) return;
+        publish({models: [], loading: false, message: error.message, failed: true});
+      }
+    },
+  };
+}
+
+function llmModelID(provider, model) {
+  const value = model.trim();
+  return provider === "openrouter" ? value.replace(/^openrouter\//, "") :
+    value.replace(provider === "opencode_go" ? /^(opencode-go|openai)\// : /^openai\//, "");
+}
+
+function llmDialog(p, focusModel = false) {
   const v = p || { provider: "openrouter", api_type: "", reasoning_effort: "" };
   const f = {
     name: h("input", { type: "text", value: v.name || "", placeholder: "e.g. OpenRouter – DeepSeek" }),
-    provider: select([["openrouter", "OpenRouter"], ["litellm", "LiteLLM (in-house gateway)"]], v.provider),
+    provider: select([["openrouter", "OpenRouter"], ["litellm", "LiteLLM (in-house gateway)"], ["opencode_go", "OpenCode Go"]], v.provider),
     base_url: h("input", { type: "text", value: v.base_url || "", class: "mono" }),
     api_key: h("input", { type: "password", value: "", autocomplete: "new-password", placeholder: v.has_api_key ? "Stored — enter a new key to change it" : "" }),
-    model: h("input", { type: "text", value: v.model || "", class: "mono", list: "modelList" }),
-    api_type: select([["", "Strix default"], ["chat_completions", "chat_completions"], ["responses", "responses"]], v.api_type),
+    model: h("input", { id: "llmModel", type: "text", value: v.model || "", class: "mono" }),
+    api_type: select([["", "Provider default"], ["chat_completions", "chat_completions"], ["responses", "responses"]], v.api_type),
     reasoning_effort: select([["", "Strix default"], ...["none", "minimal", "low", "medium", "high", "xhigh", "max"].map((x) => [x, x])], v.reasoning_effort),
     ca_cert_path: h("input", { type: "text", value: v.ca_cert_path || "", class: "mono", placeholder: "/etc/ssl/corp-ca.pem" }),
     is_default: h("input", { type: "checkbox", checked: !!v.is_default }),
   };
-  const dl = h("datalist", { id: "modelList" });
   const providerHelp = h("div", { class: "help" }), modelHelp = h("div", { class: "help" });
   const testOut = h("div", {});
-  const sync = () => {
-    const lit = f.provider.value === "litellm";
-    f.base_url.placeholder = lit ? "http://litellm.corp.local:4000" : "Leave empty (https://openrouter.ai/api/v1)";
-    f.model.placeholder = lit ? "model name on the gateway" : "deepseek/deepseek-v4.1-flash-1017";
-    providerHelp.textContent = lit ? "Passed to Strix as openai/<model> and LLM_API_BASE (OpenAI-compatible gateway method). If the gateway supports only chat completions, set the API type to chat_completions." : "Passed to Strix as openrouter/<provider>/<model>.";
-    modelHelp.textContent = `Value sent to Strix: ${lit ? "openai/" : "openrouter/"}${f.model.value.replace(/^(openai|openrouter)\//, "") || "<model>"}`;
+  const search = h("input", {type: "search", placeholder: "Search model names…", "aria-label": "Search models"});
+  const available = h("select", {id: "availableModels", size: "5", class: "model-options", "aria-label": "Available models"});
+  const modelStatus = h("div", {class: "help", role: "status", "aria-live": "polite"});
+  const resultCount = h("div", {class: "help"});
+  let models = [], refresh, observer, timer;
+  const modelID = () => llmModelID(f.provider.value, f.model.value);
+  const renderModels = () => {
+    const matching = models.filter(m => m.toLowerCase().includes(search.value.trim().toLowerCase()));
+    const shown = matching.slice(0, 200);
+    available.replaceChildren(shown.map(m => h("option", {value: m, title: m}, m)));
+    available.value = shown.includes(modelID()) ? modelID() : "";
+    available.disabled = !shown.length;
+    resultCount.textContent = models.length ? `${matching.length} of ${models.length} models` + (matching.length > 200 ? " · showing 200; search to narrow the list" : "") +
+      (modelID() && !models.includes(modelID()) ? " · Current model is not listed; choose another model or keep your custom ID." : "") : "Choose from the catalogue or enter a custom model ID above.";
   };
-  f.provider.addEventListener("change", sync); f.model.addEventListener("input", sync); sync();
+  const sync = () => {
+    const lit = f.provider.value === "litellm", go = f.provider.value === "opencode_go";
+    f.base_url.placeholder = lit ? "http://litellm.corp.local:4000" : go ? "Leave empty (https://opencode.ai/inference/go/openai/v1)" : "Leave empty (https://openrouter.ai/api/v1)";
+    f.model.placeholder = "Choose below or enter a custom model ID";
+    providerHelp.textContent = go ? "Uses your OpenCode Go subscription through its OpenAI-compatible API. Scan content goes to OpenCode; limits and extra usage follow your account settings. Default API: chat completions." : lit ? "Passed to Strix as openai/<model> and LLM_API_BASE (OpenAI-compatible gateway method). If the gateway supports only chat completions, set the API type to chat_completions." : "Passed to Strix as openrouter/<provider>/<model>.";
+    modelHelp.textContent = `Value sent to Strix: ${lit || go ? "openai/" : "openrouter/"}${modelID() || "<model>"}`;
+  };
   const body = () => ({ id: p && p.id, ...Object.fromEntries(Object.entries(f).map(([k, el]) => [k, el.type === "checkbox" ? el.checked : el.value])) });
+  const catalogue = modelCatalogue((payload, full) => api(`/api/llm-profiles/${full ? "test" : "models"}`, {method: "POST", body: payload}), state => {
+    models = state.models; refresh.disabled = state.loading; modelStatus.textContent = state.message;
+    modelStatus.className = "help" + (state.failed || state.result?.ok === false ? " danger-text" : "");
+    renderModels();
+    if (state.fullTest && state.result) {
+      const r = state.result;
+      testOut.replaceChildren(alertBox(r.ok ? (r.model_found === false ? "warn" : "info") : "danger", r.ok ? (r.check_type === "catalog" ? "Model catalogue loaded" : "Connection OK") : "Connection failed", r.message));
+    }
+  }, id => { f.model.value = id; sync(); }, () => f.model.value);
+  const effectiveBase = (provider, value) => (value.trim() || ({openrouter: "https://openrouter.ai/api/v1", opencode_go: "https://opencode.ai/inference/go/openai/v1"}[provider] || "")).replace(/\/+$/, "");
+  const loadModels = (fullTest = false) => {
+    clearTimeout(timer);
+    const base = effectiveBase(f.provider.value, f.base_url.value);
+    if (!base) return catalogue.invalidate("Enter the gateway Base URL to load its models.");
+    try { const url = new URL(base); if (!["http:", "https:"].includes(url.protocol)) throw new Error(); }
+    catch { return catalogue.invalidate("Enter a valid http(s) Base URL to load models."); }
+    const storedKey = v.has_api_key && v.provider === f.provider.value && effectiveBase(v.provider, v.base_url || "") === base;
+    if (f.provider.value === "opencode_go" && !f.api_key.value.trim() && !storedKey)
+      return catalogue.invalidate("Enter the OpenCode Go API key to load models. Re-enter it after changing the address.");
+    return catalogue.load(body(), fullTest);
+  };
+  const invalidate = () => { clearTimeout(timer); catalogue.invalidate(); testOut.replaceChildren(); };
+  refresh = button("Refresh models", {size: "sm", ic: "refresh", onclick: () => loadModels()});
+  search.addEventListener("input", renderModels);
+  available.addEventListener("change", () => { if (available.value) { f.model.value = available.value; testOut.replaceChildren(); sync(); renderModels(); } });
+  f.provider.addEventListener("change", () => {
+    invalidate();
+    f.base_url.value = ""; f.api_key.value = ""; f.model.value = ""; f.api_type.value = "";
+    search.value = "";
+    f.api_key.placeholder = v.has_api_key && f.provider.value === v.provider ? "Stored — enter a new key to change it" : "Enter the selected provider's key";
+    sync(); renderModels(); loadModels();
+  });
+  for (const input of [f.base_url, f.api_key, f.ca_cert_path]) {
+    input.addEventListener("input", invalidate);
+    input.addEventListener("change", () => loadModels());
+  }
+  f.model.addEventListener("input", () => { testOut.replaceChildren(); sync(); renderModels(); }); sync();
   const close = dialog(p ? "Edit LLM connection" : "New LLM connection", [
-    h("div", { class: "field-row two" }, field("Connection name", f.name), h("div", { class: "field" }, h("label", {}, "Provider"), f.provider)),
+    h("div", { class: "field-row two" }, field("Connection name", f.name), field("Provider", f.provider)),
     providerHelp,
     field("Base URL", f.base_url),
-    field("API key", f.api_key, "Stored encrypted; can't be viewed after saving. Usually a virtual key for LiteLLM; can be left empty if the gateway requires no key."),
-    h("div", { class: "field" }, h("label", {}, "Model"), f.model, dl, modelHelp),
+    field("API key", f.api_key, "Stored encrypted; can't be viewed after saving. Required for OpenRouter and OpenCode Go. Optional for a LiteLLM gateway that requires no key."),
+    h("div", { class: "field model-picker" }, h("label", { for: f.model.id }, "Model"), f.model, modelHelp,
+      h("div", {class: "model-filter"}, search, refresh), available, resultCount, modelStatus),
     h("div", { class: "field-row two" }, field("API type", f.api_type), field("Reasoning effort", f.reasoning_effort)),
     field("Custom CA certificate", f.ca_cert_path, "For in-house TLS; passed to Strix as SSL_CERT_FILE."),
     h("label", { class: "check" }, f.is_default, "Make default connection"),
+    h("div", {class: "help"}, "Saving a model updates this connection for queued and future scans. Running scans keep their current model."),
     testOut], [
-    button("Test connection", { onclick: guard(async () => {
-      testOut.replaceChildren(h("div", { class: "faint" }, "Testing…"));
-      const r = await api("/api/llm-profiles/test", { method: "POST", body: body() });
-      dl.replaceChildren(r.models.map((m) => h("option", { value: m })));
-      testOut.replaceChildren(alertBox(r.ok ? (r.model_found === false ? "warn" : "info") : "danger", r.ok ? "Connection OK" : "Connection failed", r.message + (r.models.length ? " Suggestions are listed in the Model field." : "")));
-    }) }),
+    button("Test connection", { onclick: () => loadModels(true) }),
     h("span", { class: "spacer" }),
     button("Cancel", { onclick: () => close() }),
     button("Save", { kind: "primary", onclick: guard(async () => {
       await api(p ? `/api/llm-profiles/${p.id}` : "/api/llm-profiles", { method: p ? "PUT" : "POST", body: body() });
       close(); toast("Connection saved"); router(); refreshSystem();
     }) })], { wide: true });
+  const root = $("#dialogs").lastElementChild;
+  observer = new MutationObserver(() => {
+    if (!root.isConnected) { clearTimeout(timer); catalogue.dispose(); observer.disconnect(); }
+  });
+  observer.observe($("#dialogs"), {childList: true});
+  if (focusModel) setTimeout(() => { if (root.isConnected) search.focus(); }, 0);
+  timer = setTimeout(() => loadModels(), 250);
 }
 
 // ================================================================== shared pickers
