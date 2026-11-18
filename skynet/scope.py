@@ -50,7 +50,7 @@ def norm_path(path: str) -> str:
     p = "/".join(segs)
     if len(p) > 1 and p.endswith("/"):
         p = p[:-1]
-    return p[:300]
+    return p
 
 
 def host_map(run_targets_info: list[dict[str, Any]]) -> dict[str, str]:
@@ -77,7 +77,7 @@ def _rule(entry: str) -> tuple[str, int | None, str]:
     if e.startswith("/"):
         return "", None, e.rstrip("/") or "/"
     scheme, host, port, path = split(e)
-    explicit_port = port if (":" in e.split("//")[-1].split("/")[0]) else None
+    explicit_port = port if scheme in DEFAULT_PORTS or (":" in e.split("//")[-1].split("/")[0]) else None
     return host, explicit_port, (path.rstrip("/") if path and path != "/" else "")
 
 
@@ -90,22 +90,26 @@ def label(target: dict[str, Any], host: str, port: int | None = None, path: str 
         rh, rp, pp = _rule(e)
         if rh and not _host_match(rh, host):
             continue
-        if rp and port and rp != port:
+        if rp and port is not None and rp != port:
             continue
         if not rh and not pp:
             continue
         if not pp or path == pp or path.startswith(pp.rstrip("/") + "/"):
-            return "out"
+            return "unknown" if rp and port is None else "out"
     rules = [s for s in (target.get("in_scope") or []) if s.strip()]
     if not rules:  # no explicit list: the configured targets themselves define scope
         rules = [target.get("base_url") or ""] + [x for x in (target.get("extra_targets") or []) if "://" in str(x) or "." in str(x)]
+    unknown_port = False
     for e in rules:
         rh, rp, pp = _rule(e)
         if not rh or not _host_match(rh, host):
             continue
-        if rp and port and rp != port:
+        if rp and port is not None and rp != port:
             continue
         if pp and not (path == pp or path.startswith(pp + "/")):
             continue
+        if rp and port is None:
+            unknown_port = True
+            continue
         return "in"
-    return "out" if rules else "unknown"
+    return "unknown" if unknown_port or not rules else "out"

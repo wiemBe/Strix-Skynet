@@ -56,15 +56,18 @@ def get(pid: int) -> dict[str, Any] | None:
 
 def secrets_of(p: dict[str, Any]) -> dict[str, Any]:
     raw = crypto.vault_decrypt(p.get("secret_enc"))
-    return json.loads(raw) if raw else {}
+    try:
+        value = json.loads(raw) if raw else {}
+        if not isinstance(value, dict):
+            raise ValueError()
+        return value
+    except (ValueError, TypeError) as e:
+        raise crypto.DecryptError("Stored authentication context is invalid.") from e
 
 
 def secret_values(p: dict[str, Any]) -> list[str]:
     """Every value that must be masked wherever it shows up."""
-    try:
-        s = secrets_of(p)
-    except crypto.DecryptError:
-        return []
+    s = secrets_of(p)
     vals: list[str] = []
     if s.get("password"):
         vals.append(s["password"])
@@ -101,7 +104,30 @@ def masking_revision(scan: dict[str, Any]) -> str:
     """Opaque revision of masking inputs, including same-second rotations. No plaintext secret is hashed or sent."""
     rows = db.q("SELECT id, secret_enc FROM auth_profiles ORDER BY id")
     data = [(p["id"], p.get("secret_enc")) for p in rows]
-    return hashlib.sha256(json.dumps([data, scan.get("redact_enc")], sort_keys=True).encode()).hexdigest()
+    return hashlib.sha256(json.dumps([data, _mask_tokens(scan)], sort_keys=True).encode()).hexdigest()
+
+
+def _mask_tokens(scan: dict[str, Any]) -> list[str]:
+    tokens = {scan["redact_enc"]} if scan.get("redact_enc") else set()
+    if scan.get("run_name"):
+        tokens.update(r["redact_enc"] for r in db.q("SELECT DISTINCT redact_enc FROM scans WHERE run_name=? "
+                      "AND COALESCE(redact_enc,'')<>''", (scan["run_name"],)))
+    return sorted(tokens)
+
+
+def _snapshot_values(token: str) -> list[str]:
+    try:
+        value = json.loads(crypto.vault_decrypt(token) or "[]")
+        if not isinstance(value, list) or any(not isinstance(v, str) for v in value):
+            raise ValueError()
+        return value
+    except (ValueError, TypeError) as e:
+        raise crypto.DecryptError("Stored masking context is invalid.") from e
+
+
+def masking_values(scan: dict[str, Any]) -> list[str]:
+    """All retained credentials of this Strix run, including launches before a resume/rotation."""
+    return sorted({value for token in _mask_tokens(scan) for value in _snapshot_values(token)})
 
 
 def global_redactor(extra: list[str] | None = None) -> Redactor:
@@ -123,13 +149,7 @@ def global_redactor(extra: list[str] | None = None) -> Redactor:
 def scan_redactor(scan: dict[str, Any]) -> Redactor:
     """Current profile secrets + the encrypted snapshot of the values this scan was started with (so masking keeps
     working after a profile is rotated or deleted)."""
-    snap: list[str] = []
-    if scan.get("redact_enc"):
-        try:
-            snap = json.loads(crypto.vault_decrypt(scan["redact_enc"]) or "[]")
-        except (crypto.DecryptError, ValueError):
-            snap = []
-    return global_redactor(snap)
+    return global_redactor(masking_values(scan))
 
 
 _stored_cache: dict[str, Any] = {"sig": None}
@@ -148,14 +168,9 @@ def stored_redactor() -> Redactor:
     if _stored_cache["sig"] != sig:
         values = []
         for p in profiles:
-            # Unlike the display helper secret_values(), do not ignore unreadable secrets.
-            secrets_of(p)
             values.extend(secret_values(p))
         for row in snapshots:
-            snapshot = json.loads(crypto.vault_decrypt(row["redact_enc"]) or "[]")
-            if not isinstance(snapshot, list) or any(not isinstance(v, str) for v in snapshot):
-                raise ValueError("Invalid masking snapshot")
-            values.extend(snapshot)
+            values.extend(_snapshot_values(row["redact_enc"]))
         _stored_cache.update(sig=sig, r=Redactor(values))
     return _stored_cache["r"]
 
@@ -164,11 +179,9 @@ def finding_redactor(group_id: int) -> Redactor:
     """Mask historical group metadata after rotation, even if source files were removed."""
     values = []
     for row in db.q("SELECT DISTINCT s.redact_enc FROM scans s JOIN finding_occurrences o ON o.scan_id=s.id "
+                    "OR (s.run_name=o.run_name AND s.run_name<>'') "
                     "WHERE o.group_id=? AND COALESCE(s.redact_enc,'')<>''", (group_id,)):
-        try:
-            values.extend(json.loads(crypto.vault_decrypt(row["redact_enc"]) or "[]"))
-        except (crypto.DecryptError, ValueError):
-            continue
+        values.extend(_snapshot_values(row["redact_enc"]))
     return global_redactor(values)
 
 
@@ -205,7 +218,12 @@ def payload(body: dict[str, Any], existing: dict[str, Any] | None) -> tuple[dict
         raise ValueError("Invalid method")
     old = {}
     if existing and existing.get("secret_enc") and existing["kind"] == kind:
-        old = secrets_of(existing)  # DecryptError propagates: user must re-enter
+        try:
+            old = secrets_of(existing)
+        except crypto.DecryptError:
+            # A full replacement can repair an unreadable profile. Empty/partial replacements still fail
+            # the required-value checks below; never replace an unreadable secret with blank credentials.
+            old = {}
     cols: dict[str, Any] = {"name": name, "kind": kind, "description": (body.get("description") or "").strip(),
                             "notes": (body.get("notes") or "").strip(), "username": "", "login_url": "",
                             "header_names": [], "cookie_names": [], "cookie_domain": "",

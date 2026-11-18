@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 from contextlib import closing
 import re
 import sqlite3
@@ -53,8 +54,11 @@ def list_run_dirs(workdir: str) -> list[Path]:
 
 def run_meta(run_dir: Path) -> dict[str, Any]:
     r = _load_json(run_dir / "run.json") or {}
-    usage = r.get("llm_usage") or {}
-    targets = [t.get("original") for t in r.get("targets_info") or [] if t.get("original")]
+    r = r if isinstance(r, dict) else {}
+    usage = r.get("llm_usage") if isinstance(r.get("llm_usage"), dict) else {}
+    results = r.get("scan_results") if isinstance(r.get("scan_results"), dict) else {}
+    target_info = r.get("targets_info") if isinstance(r.get("targets_info"), list) else []
+    targets = [t["original"] for t in target_info if isinstance(t, dict) and isinstance(t.get("original"), str)]
     return {
         "run_name": r.get("run_name") or run_dir.name,
         "status": r.get("status"),
@@ -66,7 +70,7 @@ def run_meta(run_dir: Path) -> dict[str, Any]:
         "cost": usage.get("cost") if usage.get("cost") else None,
         "tokens": usage.get("total_tokens"),
         "requests": usage.get("requests"),
-        "executive_summary": (r.get("scan_results") or {}).get("executive_summary"),
+        "executive_summary": results.get("executive_summary"),
     }
 
 
@@ -115,7 +119,13 @@ def findings(run_dir: Path) -> list[dict[str, Any]]:
                     items.append(_parse_vuln_md(p))
                 except OSError:
                     continue
-    items.sort(key=lambda v: (-SEV_RANK.get(v["severity"], 0), -(v.get("cvss") or 0)))
+    for v in items:
+        try:
+            score = float(v["cvss"]) if v.get("cvss") is not None else None
+        except (TypeError, ValueError, OverflowError):
+            score = None
+        v["cvss"] = score if score is not None and math.isfinite(score) and 0 <= score <= 10 else None
+    items.sort(key=lambda v: (-SEV_RANK.get(v["severity"], 0), -(v["cvss"] or 0)))
     return items
 
 
@@ -181,14 +191,20 @@ def settle_agents(data: dict[str, Any], scan_status: str, active: bool) -> dict[
 def summarize(run_dir: Path, fail_on: str | None = None) -> dict[str, Any]:
     meta = run_meta(run_dir)
     items = findings(run_dir)
-    counts = severity_counts(items)
+    final = _load_json(run_dir / "vulnerabilities.json")
+    # A missing/unreadable final list cannot make a release gate pass. Live Markdown is useful for a
+    # provisional fail, but only a fully readable final list can establish a pass.
+    final_available = isinstance(final, list) and all(isinstance(v, dict) for v in final)
+    counts = severity_counts(items) if final_available or items else None
     gate = None
     if fail_on and fail_on in SEV_RANK:
         threshold = SEV_RANK[fail_on]
-        gate = "fail" if any(SEV_RANK.get(v["severity"], 4) >= threshold for v in items) else "pass"
+        gate = ("fail" if any(SEV_RANK.get(v["severity"], 4) >= threshold for v in items) else
+                "pass" if final_available and meta["status"] == "completed" else None)
     return {
         "counts": counts,
-        "total": len(items),
+        "total": len(items) if counts is not None else None,
+        "findings_available": final_available,
         "cost": meta["cost"] or None,   # Strix writes 0.0 when it cannot price the model
         "tokens": meta["tokens"],
         "requests": meta["requests"],
@@ -237,3 +253,32 @@ def tail(path: Path, offset: int, max_bytes: int = 256_000) -> tuple[str, int]:
         f.seek(offset)
         chunk = f.read(max_bytes)
     return chunk.decode("utf-8", errors="replace"), offset + len(chunk)
+
+
+def tail_lines(path: Path, offset: int, max_bytes: int = 256_000) -> tuple[str, int]:
+    """Bounded log preview containing only whole lines, even for arbitrary caller offsets.
+
+    Starting or ending inside a credential defeats value-based masking. Skip a partial first line and
+    oversized lines; retain a short unfinished last line for the next poll instead of publishing its prefix.
+    `tail` remains the raw reader for internal process/run discovery.
+    """
+    try:
+        with path.open("rb") as f:
+            size = f.seek(0, 2)
+            if offset < 0 or offset > size:
+                offset = max(0, size - max_bytes)
+            if offset:
+                f.seek(offset - 1)
+                if f.read(1) != b"\n":
+                    skipped = f.readline(max_bytes)
+                    offset += len(skipped)
+                    if not skipped.endswith(b"\n"):
+                        return "", offset
+            f.seek(offset)
+            chunk = f.read(max_bytes)
+    except OSError:
+        return "", 0
+    end = chunk.rfind(b"\n")
+    if end < 0:
+        return "", offset + len(chunk) if len(chunk) == max_bytes else offset
+    return chunk[:end + 1].decode("utf-8", errors="replace"), offset + end + 1

@@ -241,6 +241,7 @@ def _launch(scan: dict[str, Any], settings: dict[str, str]) -> None:
     # Auth: secret values go into 0600 workspace files (never the instruction); masks snapshot the values used so
     # redaction survives a later profile rotation/deletion. Pre-checks are Skynet's own, separate from the scan.
     auth_section, wfiles, masks = vault.render(profiles, RUNTIME_DIR, sid)
+    masks += vault.masking_values({**scan, "run_name": scan.get("resume_run") or scan.get("run_name")})
     auth_checks = _auth_precheck(profiles, target)
 
     args = ["--non-interactive", f"--config={cfg_path}"]
@@ -276,6 +277,10 @@ def _launch(scan: dict[str, Any], settings: dict[str, str]) -> None:
     # Keyed HMAC digests + non-secret profile metadata, for session-health evidence (SKY-02). Computed before the
     # process starts so a failure here can never leave an untracked Strix process behind.
     auth_snapshot = vault.global_redactor().obj(verify.profile_snapshot(profiles), True)
+    # Make the masking snapshot durable before any child output becomes readable.
+    # A resumed run can still contain credentials from earlier launches.
+    db.update("scans", sid, {"redact_enc": crypto.vault_encrypt(json.dumps(sorted(set(masks)))) if masks else "",
+                             "auth_checks": auth_checks, "auth_snapshot": auth_snapshot})
 
     log_path = LOG_DIR / f"scan_{sid}.log"
     before = {p.name for p in runs.list_run_dirs(str(workdir))}
@@ -289,17 +294,30 @@ def _launch(scan: dict[str, Any], settings: dict[str, str]) -> None:
         except OSError as e:
             return _fail(sid, f"Strix could not start: {e}")
     resume = scan.get("resume_run") or None
-    db.update("scans", sid, {"status": "running", "pid": proc.pid, "started_at": db.now_iso(), "error": None,
+    try:
+        db.update("scans", sid, {"status": "running", "pid": proc.pid, "started_at": db.now_iso(), "error": None,
                              "run_name": resume,
                              "run_dir": str(runs.runs_root(str(workdir)) / resume) if resume else None,
-                             "redact_enc": crypto.vault_encrypt(json.dumps(sorted(set(masks)))) if masks else "",
-                             "auth_checks": auth_checks, "control_mode": control_mode, "control_note": control_note,
-                             "auth_snapshot": auth_snapshot})
-    if scan.get("trigger") == "verify":
-        verify.mark_started(sid, profiles)
-    with _lock:
-        _procs[sid] = proc
-    threading.Thread(target=_monitor, args=(sid, proc, None, workdir, before), daemon=True).start()
+                             "control_mode": control_mode, "control_note": control_note})
+        if scan.get("trigger") == "verify":
+            verify.mark_started(sid, profiles)
+        with _lock:
+            _procs[sid] = proc
+        threading.Thread(target=_monitor, args=(sid, proc, None, workdir, before), daemon=True).start()
+    except Exception:
+        # A spawned process must never continue a pentest without a registered monitor. This covers DB
+        # write failure, verification metadata failure and failure to start the monitor thread.
+        with _lock:
+            _procs.pop(sid, None)
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait(timeout=5)
+        except ProcessLookupError:
+            proc.wait(timeout=5)
+        raise
 
 
 # ---------------------------------------------------------------- monitoring

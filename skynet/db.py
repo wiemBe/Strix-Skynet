@@ -669,7 +669,7 @@ def get_scan(sid: int) -> dict[str, Any] | None:
 
 
 def list_scans(status: str | None = None, target_id: int | None = None, schedule_id: int | None = None,
-               limit: int = 200) -> list[dict[str, Any]]:
+               limit: int = 200, campaign_id: int | None = None) -> list[dict[str, Any]]:
     sql, args = SCAN_SELECT + " WHERE 1=1", []
     if status:
         sts = status.split(",")
@@ -681,6 +681,9 @@ def list_scans(status: str | None = None, target_id: int | None = None, schedule
     if schedule_id:
         sql += " AND s.schedule_id=?"
         args.append(schedule_id)
+    if campaign_id is not None:
+        sql += " AND s.campaign_id=?"
+        args.append(campaign_id)
     sql += " ORDER BY COALESCE(s.started_at, s.created_at) DESC, s.id DESC LIMIT ?"
     args.append(limit)
     return q(sql, args)

@@ -65,7 +65,7 @@ def strix_model(p: dict[str, Any]) -> str:
 
 def strix_env(p: dict[str, Any]) -> dict[str, str]:
     env = {"STRIX_LLM": strix_model(p)}
-    key = crypto.decrypt(p.get("api_key_enc"))
+    key = crypto.decrypt_strict(p.get("api_key_enc"))
     if key:
         env["LLM_API_KEY"] = key
     elif p.get("provider") == "litellm":
@@ -112,7 +112,7 @@ def _get(url: str, key: str, cafile: str | None) -> Any:
 
 
 def test(p: dict[str, Any], key_override: str | None = None) -> dict[str, Any]:
-    key = key_override if key_override is not None else crypto.decrypt(p.get("api_key_enc"))
+    key = key_override if key_override is not None else crypto.decrypt_strict(p.get("api_key_enc"))
     provider = p.get("provider")
     base = (p.get("base_url") or PROVIDERS.get(provider, {}).get("default_base") or "").rstrip("/")
     cafile = p.get("ca_cert_path") or None

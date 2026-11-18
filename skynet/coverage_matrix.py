@@ -207,14 +207,14 @@ def build(scan: dict[str, Any], run_dir: Path | None) -> dict[str, Any]:
     for i, e in enumerate(entries):
         if not isinstance(e, dict):
             continue
-        claim = {"index": i, **{k: e.get(k) for k in ("surface", "risk_area", "outcome", "outcome_label", "evidence",
-                                                      "recorded_by", "recorded_at", "updated_at", "source")}}
+        claim = red.obj({"index": i, **{k: e.get(k) for k in ("surface", "risk_area", "outcome", "outcome_label", "evidence",
+                                                      "recorded_by", "recorded_at", "updated_at", "source")}}, True)
         tt = test_type(e.get("risk_area") or "")
         eps = endpoints_of(e.get("surface") or "", hmap)
         claim.update(test_type=tt, endpoints=[f"{ep[3]} {origin_label(ep) + ep[4] if ep[1] else ep[4]}" for ep in eps])
         claims.append(claim)
         if not eps:
-            ep = ("", "", None, "", "(unmapped surface) " + str(e.get("surface") or "")[:120])
+            ep = ("", "", None, "", "(unmapped surface) " + red.text(str(e.get("surface") or ""), True)[:120])
             _put(cells, (ep, "*", tt), "unknown",
                  "The surface label names no HTTP method and path, so it cannot be mapped to an endpoint.", claim=i)
             continue

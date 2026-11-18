@@ -19,7 +19,8 @@ function selfPoll(el, ms, fn) {           // stops by itself when the element le
 function exchangePanel(x, title) {
   const part = (name, p) => h("div", { class: "ex-part" },
     h("div", { class: "ex-part-head" }, h("span", { class: "live-code-label" }, name.toUpperCase()),
-      !p ? h("span", { class: "tag" }, "Not recorded") : p.complete ? h("span", { class: "tag" }, "Complete") : h("span", { class: "tag danger" }, p.clipped ? "Clipped" : "Incomplete page"),
+      !p ? h("span", { class: "tag" }, "Not recorded") : p.clipped ? h("span", { class: "tag danger" }, "Preview clipped")
+        : p.complete ? h("span", { class: "tag" }, "Complete") : h("span", { class: "tag danger" }, "Incomplete page"),
       p ? h("span", { class: "faint" }, `viewed by ${p.agent_id} · ${p.stored_at ? fmtShort(p.stored_at) : "time unavailable"}`) : null),
     p ? h("pre", { class: "ex-text" }, p.text || "(empty)") : h("div", { class: "faint ex-missing" }, `The agent did not view the full ${name}.`));
   if (x.missing) return h("div", { class: "ex-panel" }, h("div", { class: "ex-head" }, h("strong", {}, title || `Request ${x.request_id}`)), alertBox("warn", "Evidence missing", x.reason));

@@ -118,7 +118,7 @@ def load(run_dir: Path | None) -> dict[str, dict[str, Any]]:
             prev = x[part]
             # Prefer a complete, parseable view; never let a later partial page replace a complete one.
             if prev is None or (not prev["complete"] and complete) or (prev["complete"] == complete and parsed and not prev["parsed"]):
-                x[part] = {"raw": data["content"][:MAX_BODY], "parsed": parsed, "complete": complete and bool(parsed),
+                x[part] = {"raw": data["content"], "parsed": parsed, "complete": complete and bool(parsed),
                            "clipped": len(data["content"]) > MAX_BODY, "agent_id": sid, "message_id": mid,
                            "call_id": cid, "stored_at": None if (sid, at) in bursts else _iso(at)}
             if sid not in x["viewed_by"]:
@@ -240,7 +240,7 @@ def public(x: dict[str, Any], red: Redactor, run_name: str, roles: dict[str, Any
     def part(p: dict[str, Any] | None) -> dict[str, Any] | None:
         if not p:
             return None
-        return {"text": red.text(p["raw"], strict=True), "complete": p["complete"], "clipped": p["clipped"],
+        return {"text": red.text(p["raw"], strict=True)[:MAX_BODY], "complete": p["complete"], "clipped": p["clipped"],
                 "agent_id": p["agent_id"], "stored_at": p["stored_at"], "call_id": p["call_id"]}
     li = x.get("listed")
     return {"key": f"{run_name}:{x['request_id']}", "run_name": run_name, "request_id": x["request_id"],
