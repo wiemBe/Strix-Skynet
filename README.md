@@ -180,13 +180,26 @@ Süreç düzeyindeki ayarlar `.env` / ortam değişkenleriyle verilir (tamamı i
 | `SKYNET_COOKIE_SECURE` | `0` | HTTPS arkasında `1` yapın |
 | `SKYNET_TIMEZONE` | `Europe/Istanbul` | Zamanlamaların varsayılan saat dilimi |
 | `SKYNET_DATA` | `./data` | SQLite veritabanı, süreç logları, geçici çalışma dosyaları |
-| `SKYNET_STRIX_BIN`, `SKYNET_STRIX_WORKDIR` | `.strix-runtime/bin/strix` (yoksa `~/.strix/bin/strix`), `~` | İlk açılış varsayılanları |
+| `SKYNET_STRIX_BIN`, `SKYNET_STRIX_WORKDIR` | Otomatik binary keşfi, yazılabilir kullanıcı dizini | Otomatik modun ortam override'ları; Settings'teki manuel yol önceliklidir |
 | `SKYNET_STRIX_PYTHON` | ilk bulunan python3.12/3.13/3.14 | Paketlenmiş Strix'in kurulacağı Python |
 
 Strix binary yolu, çalışma klasörü, eşzamanlı tarama limiti, Strix telemetrisi ve webhook adresi
 **Ayarlar** sayfasından yönetilir.
 
-## LLM bağlantıları: OpenRouter ve LiteLLM
+**Strix yolları otomatik seçilir.** Binary için sıra: `SKYNET_STRIX_BIN` → projedeki
+`.strix-runtime/bin/strix` → `~/.strix/bin/strix` → `PATH` üzerindeki `strix`. Ortam override'ı dışında
+yalnız çalıştırılabilir dosyalar seçilir. Çalışma klasörü `SKYNET_STRIX_WORKDIR`, yoksa uygulamayı
+çalıştıran kullanıcının yazılabilir home dizinidir; home uygun değilse `SKYNET_DATA/work` kullanılır
+(ilk taramada oluşturulur). Sunucuda bu kullanıcı, tarayıcıdaki kullanıcı değil servis hesabıdır.
+
+Settings > Strix runtime environment içindeki **Strix binary** ve **Working folder** boş bırakılırsa
+otomatik seçim her okumada yeniden çözülür. Elle yol girerek alanları birbirinden bağımsız override
+edebilirsiniz; ekranda otomatik aday ve geçerli seçimin kaynağı görünür. **Use automatic paths → Save**
+iki alanı otomatiğe döndürür. Yeni kurulumlar otomatik başlar; eski kayıtlı yollar manuel override olarak
+korunur. Bulunamayan açık bir override sessizce başka yola geçmez. Çalışan tarama varken çalışma klasörü
+değiştirilemez. Bu özellik Strix'i indirip kurmaz veya eski sonuç dosyalarını taşımaz.
+
+## LLM bağlantıları: OpenRouter, OpenCode Go ve LiteLLM
 
 Skynet ayrı bir LLM katmanı kurmaz. Seçilen bağlantı profili, Strix'in kendi
 [yapılandırma değişkenlerine](https://docs.strix.ai/advanced/configuration) çevrilir ve her tarama için
@@ -194,16 +207,45 @@ geçici bir `--config` dosyasıyla (0600, tarama bitince silinir) verilir:
 
 | Profil alanı | Strix değişkeni |
 |---|---|
-| Model | `STRIX_LLM` (OpenRouter: `openrouter/<model>`, LiteLLM: `openai/<model>`) |
+| Model | `STRIX_LLM` (OpenRouter: `openrouter/<model>`, Go / LiteLLM: `openai/<model>`) |
 | API anahtarı | `LLM_API_KEY` |
 | Base URL | `LLM_API_BASE` |
 | API tipi | `STRIX_API_TYPE` (gateway yalnızca chat completions destekliyorsa `chat_completions`) |
 | Reasoning effort | `STRIX_REASONING_EFFORT` |
 | Özel CA | `SSL_CERT_FILE` |
+| Go oturumu | `LLM_EXTRA_HEADERS` (`User-Agent: Skynet-Strix/1.0`, tarama boyunca sabit `x-opencode-session`) |
 
 **Kurum içine geçiş:** Settings > LLM connections > Add connection → Sağlayıcı "LiteLLM", base URL
-`http://litellm.kurum.local:4000`, LiteLLM virtual key ve gateway'deki model adı → **Test connection**
-(model listesi gelir) → **Make default**. Kod değişikliği gerekmez; OpenRouter profili kullanılabilir kalır.
+`http://litellm.kurum.local:4000`, gerekiyorsa LiteLLM virtual key → otomatik gelen listeden gateway modelini
+seçin → Save / **Make default**. Kod değişikliği gerekmez; OpenRouter profili kullanılabilir kalır.
+
+**OpenCode Go aboneliği:** Settings > LLM connections > Add connection → Provider **OpenCode Go** →
+bağlantıya bir isim ve Go API anahtarını girin. Base URL boş bırakılırsa
+`https://opencode.ai/inference/go/openai/v1`, API type boşsa `chat_completions` kullanılır.
+Anahtar alanından çıkınca Go model kataloğu otomatik yüklenir; listeden hesabınızda erişebildiğiniz modeli
+seçin → Save. İsterseniz **Make default connection** seçin veya tarama/zamanlamada bu profili seçin.
+Model adı yalın girilebilir; OpenCode'dan kopyalanan `opencode-go/` öneki de kabul edilir.
+
+Go kontrolü yalnız model kataloğuna erişimi ölçer; anahtar geçerliliğini, çıkarım iznini veya kalan kotayı
+doğrulamaz ve ücretli bir üretim isteği göndermez. Her tarama ayrı bir oturum kimliği kullanır; aynı run'ı
+devam ettirirken kimlik korunur. Strix'in normal, compaction ve dedupe istekleri aynı LLM başlıklarını kullanır.
+Sağlayıcı değiştirirken eski anahtar başka sağlayıcıya otomatik gönderilmez; yeni sağlayıcının anahtarını
+yeniden girin. Go hatasında Zen/PAYG uç noktasına geçilmez; limitler ve ekstra kullanım ücretleri OpenCode
+hesap ayarlarınıza bağlıdır. [Go aboneliği](https://opencode.ai/docs/console/go/) ve
+[diğer istemciler için resmî API/oturum gereksinimleri](https://opencode.ai/docs/console/harnesses/).
+
+**Model seçimi (üç sağlayıcı):** Kayıtlı bağlantının **Change model** düğmesi doğrudan model aramasına
+odaklanır ve güncel kataloğu getirir. Yeni bağlantıda sağlayıcı/URL/anahtar alanları tamamlanıp alandan
+çıkıldığında liste yüklenir; **Refresh models** ile elle yenilenebilir. Arama model adlarını yerelde filtreler;
+200'den fazla eşleşmede aramayla diğer modellere ulaşılır. Listeden seçim Model alanını ve Strix model
+önizlemesini günceller. Model alanı boş ve katalogda yalnız bir model varsa otomatik seçilir; mevcut/özel
+model kimliği kendiliğinden başka modele çevrilmez. Model listede yoksa uyarı görünür ve elle girilebilir.
+
+OpenRouter kataloğu anahtarsız okunur; katalogda görünmek hesap erişimi veya model yeteneği garantisi
+değildir. Otomatik model sorguları çıkarım isteği göndermez. Sağlayıcı/adres değişince eski liste temizlenir;
+kayıtlı anahtar otomatik sorguyla başka adrese gönderilmez. **Save**, bağlantının modelini kuyruktaki ve
+gelecek taramalar için değiştirir; çalışan süreç model değiştirmez. Tarama başlarken kullanılan gerçek
+model/provider adı geçmiş kaydına yazılır.
 
 Güvenlik kuralları:
 - API anahtarları veritabanında şifreli saklanır, tarayıcıya hiçbir zaman gönderilmez, loglara yazılmaz.

@@ -13,7 +13,8 @@ import threading
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
-from .config import DATA_DIR, DB_PATH, DEFAULT_STRIX_BIN, DEFAULT_STRIX_WORKDIR
+from .config import DATA_DIR, DB_PATH, PROJECT_DIR
+from . import runtime_paths
 
 _lock = threading.RLock()
 _conn: sqlite3.Connection | None = None
@@ -125,8 +126,8 @@ CREATE INDEX IF NOT EXISTS idx_sched_events ON schedule_events(schedule_id, id);
 """
 
 DEFAULT_SETTINGS: dict[str, str] = {
-    "strix_bin": DEFAULT_STRIX_BIN,
-    "strix_workdir": DEFAULT_STRIX_WORKDIR,   # strix writes to <workdir>/strix_runs/
+    "strix_bin": "",                        # empty = automatic; existing saved paths remain overrides
+    "strix_workdir": "",                    # strix writes to <resolved workdir>/strix_runs/
     "max_concurrent": "1",
     "default_scan_mode": "standard",
     "telemetry": "0",                         # STRIX_TELEMETRY passed to strix (Strix default is 1)
@@ -647,6 +648,7 @@ def get(table: str, row_id: int) -> dict[str, Any] | None:
 def get_settings() -> dict[str, str]:
     out = dict(DEFAULT_SETTINGS)
     out.update({r["key"]: r["value"] or "" for r in q("SELECT key, value FROM settings")})
+    out.update(runtime_paths.resolve(out, project_dir=PROJECT_DIR, data_dir=DATA_DIR))
     return out
 
 

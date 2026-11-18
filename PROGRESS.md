@@ -647,3 +647,55 @@ raporun dışına, uygulamanın veri/yetki/yürütme ve frontend yollarına geni
   saklama politikası ve gerçek RHEL host kabulü. Tam güvenlik denetimi/hatasızlık iddiası yok.
 - Asıl veri/anahtar/yedekler değiştirilmedi. Normal lifespan/worker/scheduler, dış hedef veya yeni Strix/LLM
   taraması başlatılmadı. Commit/push/deploy ve asıl servis restart'ı yapılmadı.
+
+## 18 Kasım 2026 — OpenCode Go ve otomatik Strix yolları
+
+Kullanıcı OpenCode Go abonelik anahtarını eklemek ve runtime yollarının otomatik seçilip manuel override
+edilebilmesini istedi.
+
+- OpenCode Go ayrı LLM provider olarak eklendi; resmî Go OpenAI adresi, `openai/<model>`, varsayılan chat
+  completions; her taramada kendi User-Agent'i ve sabit `x-opencode-session`, resume'da orijinal oturum.
+- Settings formu, katalog testi/model önerileri ve tarama provider etiketleri güncellendi. Katalog kontrolü
+  anahtar doğrulaması/çıkarım/kota kontrolü olarak sunulmuyor; Go hatasında Zen/PAYG'ye geçiş yok.
+- Anahtar şifreli saklanıyor; provider değişiminde eski anahtar tekrar kullanılmıyor. `oc_sk_` pattern
+  maskelemesi ve launch öncesinde gerçek LLM anahtarının şifreli maskeleme snapshot'ına eklenmesi var.
+- Boş runtime ayarları artık her okumada yeniden çözülüyor: ortam override'ı → paketlenmiş executable →
+  kullanıcı kurulumu → PATH. Workdir ortam override'ı veya yazılabilir home; home uygun değilse data/work.
+- Settings yolları ayrı ayrı manuel override edilebiliyor; otomatik aday/kaynak görünür, “Use automatic
+  paths → Save” boş değerlere döndürüyor. Eski kayıtlı yollar korunuyor, sessiz fallback yok. Çalışan tarama
+  varken workdir değişimi engelleniyor. Doctor aynı salt okunur resolver'ı kullanıyor.
+- **265 Python + 2 Node testi geçti** (19 yeni regresyon); compileall/JS syntax/diff-check temiz.
+  Native Strix settings ve header aktarımı gerçek runtime içinde doğrulandı; ücretli üretim isteği yok.
+- 1366×768 ve 1920×1080 izole tarayıcı QA: Go katalog/kayıt/düzenleme/provider değişimi, otomatik yol
+  kayıt/manüel override/reload/reset. [Ekranlar, yöntem ve sınırlar](docs/qa/2026-11-18-opencode-go/README.md).
+- Gerçek Go anahtarı/kota/çıkarım kabulü henüz denenmedi. Asıl DB, anahtarlar, mevcut servis ve taramalar
+  değiştirilmedi; migration/deploy/commit/push yok. Geçici QA sunucusu durduruldu.
+
+### Kullanıcının anahtarıyla Go bağlantı testi
+
+Kullanıcı profili kaydedip katalogdan 31 model gördükten sonra gerçek test istedi. Kaydedilen Go profili ve
+`glm-5.3-flash` ile yalnız sabit bir bağlantı mesajı/zararsız araç şeması gönderildi; hedef veya tarama içeriği
+gönderilmedi. Tek istek, 512 çıktı token sınırı, kendi User-Agent'i ve ayrı sabit test oturumu kullanıldı.
+
+- HTTP **200**, streaming **3 olay**, `skynet_connection_test({"status":"ok"})` araç çağrısı doğrulandı.
+- Süre **0,70 sn**; sağlayıcı **189 giriş + 14 çıkış = 203 token**, `billing_source: go`, bu istekte `cost: 0`
+  bildirdi. Kalan kota sayısal olarak ölçülmedi; sonraki isteklerin ücret/limit garantisi değildir.
+- Anahtar çıktı/loga yazılmadı, profil değiştirilmedi; Strix/pentest başlatılmadı.
+
+## 18 Kasım 2026 — Otomatik model katalogları ve seçim ekranı
+
+- OpenCode Go / OpenRouter / LiteLLM bağlantılarına otomatik model yükleme, arama, listeden seçim,
+  yenileme, manuel model kimliği ve Settings satırına **Change model** eklendi.
+- Kayıtlı bağlantı açılınca, yeni bağlantı alanlarından çıkılınca katalog yenileniyor. Tek model/boş seçim
+  otomatik doluyor; çoklu modeller veya mevcut/özel seçim rastgele değiştirilmiyor. Kaydetme açık bir eylem.
+- Ayrı admin model kataloğu endpoint'i çıkarım yapmıyor. OpenRouter public katalog için key/decrypt
+  istemiyor. Otomatik sorguda saklı credential başka adres/provider'a taşınmıyor. Geç response/error ve
+  kapanan dialog sonuçları atılıyor; katalogda olmayan model uyarısı ve manuel giriş korunuyor.
+- Model önizlemesinde OpenRouter `openai/...` vendor öneki yanlış silinmiyor. Tarama launch snapshot'ı
+  artık kuyruğa girdikten sonra değişen profilin gerçekten kullanılan model/provider/adını kaydediyor.
+- **273 Python + 7 Node** geçti; 8 yeni backend + 5 yeni frontend regresyonu, compileall/syntax/diff temiz.
+  [İki viewport, üç sağlayıcı ve seçim/kayıt kanıtları](docs/qa/2026-11-18-model-picker/README.md).
+- Gerçek profil modelleri/anahtarlar değiştirilmedi; yeni çıkarım/tarama/migration yok. İzole QA kapatıldı;
+  kullanıcı testi için localhost:8787 preview güncel kodla, lifespan/worker/scheduler kapalı yeniden açıldı.
+  Commit/push yok.
+- Yan panelde gerçek Go seçicisi 31 modelle açıldı; `glm-5.3-flash` korundu, gerçek profile Save yapılmadı.
