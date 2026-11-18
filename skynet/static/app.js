@@ -63,7 +63,10 @@ function icon(name) {
   return s;
 }
 
+class NavigationChanged extends Error {}
+
 async function api(path, opts = {}) {
+  const requestHash = location.hash;
   const init = { method: opts.method || "GET", headers: { "X-Requested-With": "skynet" } };
   if (opts.body !== undefined) { init.body = JSON.stringify(opts.body); init.headers["Content-Type"] = "application/json"; }
   let r;
@@ -75,6 +78,7 @@ async function api(path, opts = {}) {
     const d = data && data.detail;
     throw new Error(typeof d === "string" ? d : Array.isArray(d) ? d.map((x) => x.msg).join("; ") : `Request failed (HTTP ${r.status})`);
   }
+  if (init.method === "GET" && requestHash !== location.hash) throw new NavigationChanged();
   return data;
 }
 
@@ -83,7 +87,7 @@ function toast(msg, err = false) {
   $("#toasts").append(t);
   setTimeout(() => t.remove(), err ? 8000 : 3500);
 }
-const guard = (fn) => async (...a) => { try { return await fn(...a); } catch (e) { toast(e.message, true); } };
+const guard = (fn) => async (...a) => { try { return await fn(...a); } catch (e) { if (!(e instanceof NavigationChanged)) toast(e.message, true); } };
 
 // Polling wrapper: on failure show a persistent connection banner with the last successful update time,
 // instead of a stream of error toasts. Recovers silently on the next success.
@@ -95,7 +99,7 @@ function setConnected(ok) {
   el.replaceChildren(icon("alert"), h("span", {}, "Can't reach the server"),
     h("span", { class: "faint" }, `last updated ${relTime(new Date(_lastSync).toISOString())}`));
 }
-const pollGuard = (fn) => async (...a) => { try { const r = await fn(...a); setConnected(true); return r; } catch (e) { setConnected(false); } };
+const pollGuard = (fn) => async (...a) => { try { const r = await fn(...a); setConnected(true); return r; } catch (e) { if (!(e instanceof NavigationChanged)) setConnected(false); } };
 
 // ================================================================== formatting
 let TZ = "Europe/Istanbul";
@@ -112,6 +116,8 @@ const LABEL_NEEDS = {
   "Create schedule": "analyst", "Add schedule": "analyst", "New campaign": "analyst", "Verify": "analyst",
   "Start verification": "analyst", "Re-verify": "analyst", "Send": "analyst", "Add note": "analyst", "Save revision": "analyst",
   "Edit": "analyst", "Pause": "analyst", "Enable": "analyst", "Archive": "analyst", "Unarchive": "analyst",
+  "Stop scan": "analyst", "Delete record": "admin", "Delete schedule": "admin",
+  "Check again": "analyst", "Re-scan the strix_runs folder": "analyst",
   "New profile": "admin", "Add connection": "admin", "Delete": "admin", "Delete target": "admin", "Make default": "admin",
 };
 const dateFmt = (iso, opts) => { if (!iso) return "—"; const d = new Date(iso); return isNaN(d) ? iso : d.toLocaleString("en-US", { timeZone: TZ, ...opts }); };
@@ -332,10 +338,11 @@ async function refreshSystem() {
     if (!o.strix.ok) issues.push("Strix not found");
     if (!o.llm_default) issues.push("No LLM connection");
     box.replaceChildren(issues.length ? h("a", { class: "sys-alert", href: "#/settings", title: issues.join("\n") },
-      h("span", { class: "dot-bad" }), h("span", { class: "lbl" }, issues.length === 1 ? issues[0] : `${issues.length} sistem sorunu`)) : null);
+      h("span", { class: "dot-bad" }), h("span", { class: "lbl" }, issues.length === 1 ? issues[0] : `${issues.length} system issues`)) : null);
     const ac = document.getElementById("activeCount"); if (ac) ac.textContent = o.active.length ? String(o.active.length) : "";
     return o;
   } catch (e) {
+    if (e instanceof NavigationChanged) return null;
     box.replaceChildren(h("div", { class: "sys-alert", title: e.message }, h("span", { class: "dot-bad" }), h("span", { class: "lbl" }, "Can't reach the server")));
     return null;
   }
@@ -378,7 +385,10 @@ async function router() {
     document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.nav === nav));
     app.replaceChildren(h("div", { class: "loading" }, "Loading…"));
     try { await fn(...m.slice(1)); }
-    catch (e) { app.replaceChildren(pageHead("Page failed to load"), alertBox("danger", "Could not load data", e.message, h("div", { class: "actions" }, button("Try again", { ic: "refresh", onclick: router })))); }
+    catch (e) {
+      if (e instanceof NavigationChanged || location.hash !== hash) return;
+      app.replaceChildren(pageHead("Page failed to load"), alertBox("danger", "Could not load data", e.message, h("div", { class: "actions" }, button("Try again", { ic: "refresh", onclick: router }))));
+    }
     window.scrollTo(0, 0);
     return;
   }
@@ -739,24 +749,29 @@ async function viewScan(id) {
     l, k === "findings" && findingsCount != null ? h("span", { class: "cnt" }, findingsCount) : null))); };
   const renderAll = () => { renderHead(); renderAlerts(); renderFacts(); };
 
+  let bodyGeneration = 0;
   const renderBody = guard(async () => {
+    const requestedTab = tab, generation = ++bodyGeneration;
+    const commit = (view) => {
+      if (generation === bodyGeneration && requestedTab === tab && location.hash === `#/scans/${id}`) body.replaceChildren(view);
+    };
     log.box = null;
     live.list = null; live.busy = false; live.generation++;
-    if (tab === "live") { compose.loaded = false; body.replaceChildren(liveView()); await Promise.all([pollLive(), pollMessages(true)]); }
-    else if (tab === "findings") body.replaceChildren(await findingsView());
-    else if (tab === "timeline") body.replaceChildren(await skyTimelineTab(id, scan));
-    else if (tab === "coverage") body.replaceChildren(await skyCoverageTab(id));
-    else if (tab === "sessions") body.replaceChildren(await skySessionTab(id, scan));
-    else if (tab === "instructions") body.replaceChildren(await skyInstructionsTab(id, scan));
-    else if (tab === "browser") body.replaceChildren(await skyBrowserTab(id, scan));
-    else if (tab === "log") body.replaceChildren(logView());
-    else if (tab === "agents") body.replaceChildren(await agentsView());
-    else if (tab === "telemetry") body.replaceChildren(await telemetryView());
+    if (tab === "live") { compose.loaded = false; commit(liveView()); await Promise.all([pollLive(), pollMessages(true)]); }
+    else if (tab === "findings") commit(await findingsView());
+    else if (tab === "timeline") commit(await skyTimelineTab(id, scan));
+    else if (tab === "coverage") commit(await skyCoverageTab(id));
+    else if (tab === "sessions") commit(await skySessionTab(id, scan));
+    else if (tab === "instructions") commit(await skyInstructionsTab(id, scan));
+    else if (tab === "browser") commit(await skyBrowserTab(id, scan));
+    else if (tab === "log") commit(logView());
+    else if (tab === "agents") commit(await agentsView());
+    else if (tab === "telemetry") commit(await telemetryView());
     else if (tab === "report") {
       const r = await api(`/api/scans/${id}/report`);
-      body.replaceChildren(r.available ? h("div", { class: "card card-pad" }, h("div", { class: "md report", html: r.html }))
+      commit(r.available ? h("div", { class: "card card-pad" }, h("div", { class: "md report", html: r.html }))
         : h("div", { class: "card" }, emptyState("No report", ACTIVE.includes(scan.status) ? "Strix writes the report when the scan finishes." : "Strix did not produce a report file for this run.")));
-    } else body.replaceChildren(detailsView());
+    } else commit(detailsView());
   });
 
   async function findingsView() {
@@ -1604,13 +1619,13 @@ function findingsCard(fs, scanIds, campaignId) {
       h("span", { class: "fc-sev" }, h("span", { class: `sq ${s}` }), SEV_TR[s]),
       h("div", { class: "fc-track", title: `${o} of ${plural(total, "group")} open` }, bar),
       h("span", { class: "fc-groups" }, plural(total, "group")),
-      o ? h("span", { class: "fc-state" }, `${o} open`) : h("span", { class: "fc-state done" }, icon("check"), "Resolved"));
+      o ? h("span", { class: "fc-state" }, `${o} open`) : h("span", { class: "fc-state done" }, "None open"));
   });
   return h("div", { class: "card fcard" },
     h("div", { class: "fc-head" },
       h("div", { class: "fc-total" },
         h("span", { class: `fc-num${open ? "" : " done"}` }, String(open)),
-        h("span", { class: "fc-lbl" }, open ? `open of ${plural(fs.unique, "group")}` : "open · all resolved")),
+        h("span", { class: "fc-lbl" }, open ? `open of ${plural(fs.unique, "group")}` : "currently marked open")),
       closed.length ? h("div", { class: "fc-rem" }, closed.map(([k, n]) => h("span", { class: `rem ${k}` }, `${REMEDIATION_TR[k]} ${n}`))) : null),
     h("div", { class: "fc-rows" }, rows),
     h("div", { class: "fc-foot" }, button("Review findings", { size: "sm", onclick: () => findingsDialog(scanIds, campaignId) })));
@@ -2082,6 +2097,33 @@ async function viewReport(kind, id) {
       h("td", { class: "num" }, sm.open_counts[k]),
       h("td", {}, f.open_age[k].n ? `${dayText(f.open_age[k].median)} · ${dayText(f.open_age[k].max)}` : "—"),
       h("td", {}, f.time_to_fix[k].n ? `${f.time_to_fix[k].n} · ${dayText(f.time_to_fix[k].median)}` : "—")))));
+  const scopeBlock = h("section", { class: "rpt-section rpt-scope" }, h("h2", {}, "Scope · current configuration"),
+    h("p", { class: "rpt-src" }, "Current target rules, not a snapshot of the scope used by historical scans."),
+    r.scope.description ? h("p", { class: "rpt-text" }, r.scope.description) : null,
+    r.scope.targets.map((t) => h("div", { class: "rpt-scope-target" }, h("h3", {}, t.name),
+      h("dl", { class: "rpt-detail-meta" },
+        h("dt", {}, "Base URL"), h("dd", {}, t.base_url || "—"),
+        h("dt", {}, "Additional targets"), h("dd", {}, t.extra_targets.join(", ") || "None configured"),
+        h("dt", {}, "In scope"), h("dd", {}, t.in_scope.join(", ") || "Base URL and additional targets; no explicit rules"),
+        h("dt", {}, "Out of scope"), h("dd", {}, t.out_of_scope.join(", ") || "None configured")))));
+  const register = h("section", { class: "rpt-section rpt-register" }, h("h2", {}, `Complete finding register · ${f.register.length}`),
+    h("p", { class: "rpt-src" }, "All recorded finding groups, including fixed, accepted and false positive. Occurrences and source scans refer to this report's selection."),
+    f.register.length ? f.register.map((g) => h("div", { class: "rpt-finding" },
+      h("div", { class: "rpt-finding-head" }, h("span", { class: `rpt-sev sev-${g.severity}` }, SEV_TR[g.severity] || g.severity),
+        h("span", { class: `rpt-chip rem-${g.remediation}` }, REMEDIATION_TR[g.remediation] || g.remediation),
+        h("span", { class: "rpt-muted" }, `#${g.id}${g.cwe ? ` · ${g.cwe}` : ""}`)),
+      h("h3", {}, h("a", { href: `#/findings/${g.id}` }, g.title || "Untitled finding")),
+      h("dl", { class: "rpt-detail-meta" },
+        h("dt", {}, "Target / host"), h("dd", {}, [g.target_name, g.host].filter(Boolean).join(" · ") || "—"),
+        h("dt", {}, "Location"), h("dd", { class: "rpt-where" }, g.where || "—"),
+        h("dt", {}, "First / last seen"), h("dd", {}, `${fmtDate(g.first_seen_at)} · ${fmtDate(g.last_seen_at)}`),
+        h("dt", {}, "Open for / marked fixed"), h("dd", {}, `${dayText(g.age_days)} · ${g.fixed_at ? fmtDate(g.fixed_at) : "—"}`),
+        h("dt", {}, "Source scans"), h("dd", {}, `${g.occurrences} occurrence${g.occurrences === 1 ? "" : "s"} · `,
+          g.scan_ids.map((sid, i) => [i ? ", " : "", h("a", { href: `#/scans/${sid}` }, `#${sid}`)]))),
+      g.remediation_note ? h("p", { class: "rpt-text" }, h("strong", {}, "Analyst note: "), g.remediation_note) : null,
+      g.seen_after_fix ? h("p", { class: "rpt-recurrence" }, "Seen again after being marked fixed; review required.") : null))
+      : h("p", { class: "rpt-empty" }, "No findings recorded. This does not establish that the application is secure."));
+  const appendix = h("div", { class: "rpt-appendix", hidden: true }, scopeBlock, register);
   const cov = r.coverage;
   const coverageBlock = kind === "targets" ? (cov ? h("div", {},
     h("p", { class: "rpt-src" }, `From scan #${cov.scan_id} · ${fmtDate(cov.at)}${cov.complete === false ? " · Strix marked this coverage record incomplete" : ""}`),
@@ -2115,6 +2157,10 @@ async function viewReport(kind, id) {
       h("div", { class: "rpt-brand" }, h("div", { class: "b" }, "Skynet"),
         h("div", {}, `Generated ${fmtDate(r.generated_at)}`), h("div", {}, `by ${r.generated_by}`),
         h("div", {}, sc.first_at ? `Period: ${dateFmt(sc.first_at, { day: "2-digit", month: "short", year: "numeric" })} – ${dateFmt(sc.last_at, { day: "2-digit", month: "short", year: "numeric" })}` : "No scans yet"))),
+    h("section", { class: "rpt-section rpt-executive" }, h("h2", {}, "Executive assessment"),
+      h("h3", {}, r.executive.headline), h("p", {}, r.executive.summary),
+      h("ul", {}, r.executive.actions.map((a) => h("li", {}, a))),
+      f.open_age_unknown ? h("p", { class: "rpt-src" }, `${f.open_age_unknown} open findings have no reliable first-seen date and are excluded from age metrics.`) : null),
     h("div", { class: "rpt-tiles" },
       tile("Open findings", f.open_total, `${sm.unique} unique finding${sm.unique === 1 ? "" : "s"} in total`),
       tile("Open critical + high", crit, crit ? `${sm.open_counts.critical} critical · ${sm.open_counts.high} high` : "None open", crit ? "hot" : ""),
@@ -2134,7 +2180,8 @@ async function viewReport(kind, id) {
         : [h("section", { class: "rpt-section" }, age), h("section", { class: "rpt-section" }, h("h2", {}, "Targets"), coverageBlock)];
     })(),
     h("section", { class: "rpt-section" }, h("h2", {}, `Open findings${f.top_open.length ? ` · top ${f.top_open.length}` : ""}`), topTable,
-      f.open_more ? h("p", { class: "rpt-src" }, `${f.open_more} more open finding${f.open_more === 1 ? "" : "s"} not listed; see Skynet for the full list.`) : null),
+      f.open_more ? h("p", { class: "rpt-src" }, `${f.open_more} more open finding${f.open_more === 1 ? "" : "s"}; choose Detailed report or download Markdown for the complete register.`) : null),
+    appendix,
     h("footer", { class: "rpt-notes" }, h("h3", {}, "How to read this report"), h("ul", {}, r.notes.map((n) => h("li", {}, n)))));
   sheet.querySelectorAll(".fill[data-w]").forEach((el) => { el.style.width = `${el.dataset.w}%`; });
   const title = `Skynet report - ${r.name} - ${dateFmt(r.generated_at, { year: "numeric", month: "2-digit", day: "2-digit" })}`;
@@ -2143,11 +2190,18 @@ async function viewReport(kind, id) {
     window.addEventListener("afterprint", () => { document.title = prev; }, { once: true });
     window.print();
   };
+  const mode = h("select", { "aria-label": "Report detail level", onchange: () => {
+    const detailed = mode.value === "detailed";
+    appendix.hidden = !detailed;
+    sheet.classList.toggle("rpt-detailed", detailed);
+  } }, h("option", { value: "summary" }, "Summary report"), h("option", { value: "detailed" }, "Detailed report · all findings"));
   app.replaceChildren(h("div", { class: "report-page" },
     h("div", { class: "report-toolbar" },
       h("a", { href: back, class: "crumb" }, icon("back"), kind === "targets" ? "Back to target" : "Back to campaign"),
-      h("span", { class: "hint" }, "In the print dialog choose “Save as PDF”. A4, light theme."),
+      mode,
+      h("a", { href: `/api/${kind}/${id}/report?format=markdown`, class: "btn", download: "" }, icon("download"), "Markdown"),
       button("Download PDF", { kind: "primary", ic: "download", onclick: print })),
+    h("p", { class: "report-export-hint" }, "PDF uses the selected detail level. Choose “Save as PDF” in the print dialog. Markdown always includes the complete register."),
     sheet));
 }
 

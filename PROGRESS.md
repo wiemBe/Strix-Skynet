@@ -623,3 +623,27 @@ Kaynak: [docs/FEATURE_BACKLOG.md](docs/FEATURE_BACKLOG.md). Önce güncel kod, t
 - [ ] Audit log için saklama/temizleme politikası yok (eklemeli, sınırsız büyür).
 - [ ] Yeniden kullanıcı adı değiştirme, SSO/LDAP ve MFA yok. SLA (son tarih) özelliği seçilmedi.
 - Commit yapılmadı.
+
+## 17 Kasım 2026 — Rapor geliştirmesi ve genişletilmiş uygulama incelemesi
+
+Kullanıcının rapor oluşturmayı iyileştirme isteğiyle özet/ayrıntılı rapor, tüm bulguları içeren register,
+current-scope eki, deterministik yönetici özeti ve Markdown indirme eklendi. Sonraki isteği üzerine inceleme
+raporun dışına, uygulamanın veri/yetki/yürütme ve frontend yollarına genişletildi.
+
+- Ayrıntılı kayıt: [uygulama kodu incelemesi](docs/reviews/2026-11-17-application-code-review.md), CR-01…17.
+- 48 uygulama/kurulum kaynak dosyası, 13.919 satırlık envanter; üçüncü taraf Strix/venv kaynağı kapsam dışı.
+- Somut düzeltmeler: log ve HTTP kanıtında kesmeden önce maskeleme; resume geçmişi ve bozuk bağlamda 503;
+  envanter/telemetri/mesaj metadata'sında read-time maskeleme; etkin portu koruyan scope; eksik/bozuk bulgu
+  çıktısında CI pass vermeme; spawn sonrası kayıt hatasında süreç sonlandırma; kampanya filtresini limitten
+  önce uygulama; uzun endpoint kimlikleri; strict LLM/CI decrypt; bozuk cookie/timezone; frontend geç yanıtları;
+  clipped kanıt/diff/export etiketleri ve talimat öncesine dönemeyen activity cursor.
+- Son doğrulama: **246 Python testi + 2 Node testi geçti**; compileall, üç JS syntax ve diff-check temiz.
+  Yerel bridge/SIEM testleri için sandbox socket izni kullanıldı. Yeni 22 uygulama inceleme regresyonu ve
+  ilk turdaki 10 rapor regresyonu var. Mevcut ResourceWarning mesajları testleri bozmadı.
+- Görsel QA: geçici DB/anahtar, 12 sentetik bulgu; 1366×768 ve 1920×1080, Admin ve Viewer. Rapor/campaign/scan
+  Details kontrolü, gerçek Markdown indirme; yatay taşma ve browser warning/error yok.
+  [Ekranlar ve kontrol notları](docs/qa/2026-11-17-code-review/README.md).
+- Kalanlar: gerçek PDF sayfa sayfa kabulü; fingerprint veri modelinde scheme/port ayrımı için ayrı migration;
+  saklama politikası ve gerçek RHEL host kabulü. Tam güvenlik denetimi/hatasızlık iddiası yok.
+- Asıl veri/anahtar/yedekler değiştirilmedi. Normal lifespan/worker/scheduler, dış hedef veya yeni Strix/LLM
+  taraması başlatılmadı. Commit/push/deploy ve asıl servis restart'ı yapılmadı.

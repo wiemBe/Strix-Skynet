@@ -1,0 +1,242 @@
+[
+  {
+    "path": "deploy/rhel/skynet.service",
+    "lines": 32,
+    "sha256": "e2e4ddd24038292c2246ba096f95c9cef0a7a2f435b62771f335e0562b44f04e"
+  },
+  {
+    "path": "scripts/doctor.py",
+    "lines": 145,
+    "sha256": "f10e31f4281e35a95a529abaa693a6a52ccc036583aa78a526e2b0c37e42627d"
+  },
+  {
+    "path": "scripts/install_nginx_rhel.py",
+    "lines": 244,
+    "sha256": "a54475240c582272c5ecb472e1109191932aa28de5085de5e01d3b97c6569d47"
+  },
+  {
+    "path": "scripts/install_rhel.sh",
+    "lines": 55,
+    "sha256": "d63deda778a1c8d91385cc66883a75723a834500b1f1ce5ad9aa1ded68d9c313"
+  },
+  {
+    "path": "scripts/qa_http.py",
+    "lines": 93,
+    "sha256": "d0d5ba5bd761745e962ffdb3e24f7d94a9f2a197c7491e592dd73809469d5951"
+  },
+  {
+    "path": "scripts/qa_nginx.py",
+    "lines": 166,
+    "sha256": "6827853dd4b2c01242afeaf7ab8f07cd489c76c8b266dbb481777659bf3a243f"
+  },
+  {
+    "path": "scripts/relocate_runs.py",
+    "lines": 70,
+    "sha256": "7c174478be0f8089727d8e9877098cd26a46ffc4bdda13fd82ebb6728fa344dd"
+  },
+  {
+    "path": "scripts/setup_strix.py",
+    "lines": 110,
+    "sha256": "00f93b6d791a60d226fa1194a20d004a9d85cb59ddcad807f010376d64de66e6"
+  },
+  {
+    "path": "scripts/setup_strix.sh",
+    "lines": 16,
+    "sha256": "e2f38232cb6f54ccd5b60a91c4b91fd7630694e3734dc37da0020013d21cc1dc"
+  },
+  {
+    "path": "skynet/__init__.py",
+    "lines": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "skynet/__main__.py",
+    "lines": 7,
+    "sha256": "c4db59a26dee0f8246dec082d055424d2ecd741dae94d9978e68349512ff998a"
+  },
+  {
+    "path": "skynet/activity.py",
+    "lines": 112,
+    "sha256": "a79a688dddb873281df9cf48a1b05cac80a95234103249416454010fe9da9541"
+  },
+  {
+    "path": "skynet/audit.py",
+    "lines": 193,
+    "sha256": "87b1b36aa6ee7981fadfd73c411dd596fa35d4e8dba3654079273956120117d7"
+  },
+  {
+    "path": "skynet/auth.py",
+    "lines": 300,
+    "sha256": "ea825cc5fce5c50eafb0eb5ff38ad1bcbccd39bea058506a1c1ce18d80962b40"
+  },
+  {
+    "path": "skynet/browser.py",
+    "lines": 115,
+    "sha256": "6e74c65ccffac0c0cbac9c09a288cda51473b7f4eba68e10f30459e5830cf4b3"
+  },
+  {
+    "path": "skynet/campaigns.py",
+    "lines": 92,
+    "sha256": "20e03c6c29209905eae2c3d2d649062331bbc8102f6143b61a102a89f4f10e12"
+  },
+  {
+    "path": "skynet/compare.py",
+    "lines": 195,
+    "sha256": "dc1688ea6eacf37f8f33713a7a0dfb90b252942eb8e6b99ace8942c24af60632"
+  },
+  {
+    "path": "skynet/config.py",
+    "lines": 62,
+    "sha256": "3c0552f3de392756806103e9c6e55d42b1c173269aa92a939d427b3f93694324"
+  },
+  {
+    "path": "skynet/control.py",
+    "lines": 337,
+    "sha256": "50e8b20e0e6b7aa618d440cc0dd27cc0c043be91397938610abaa1cf70581768"
+  },
+  {
+    "path": "skynet/coverage_matrix.py",
+    "lines": 387,
+    "sha256": "120588ce58740b1bb77a594c38b9e7d7dc1432c9fd15a6090964cfbef834aed9"
+  },
+  {
+    "path": "skynet/crypto.py",
+    "lines": 166,
+    "sha256": "83f1ef945a7a07317deb7d6df383d4c8d648ee54cafe83ce3803f5f2e64b8753"
+  },
+  {
+    "path": "skynet/db.py",
+    "lines": 693,
+    "sha256": "6a3da2b7e5cbaa5157877038cabe56b635ebbbc508e58eeb5491ce9cf3e175a3"
+  },
+  {
+    "path": "skynet/evidence.py",
+    "lines": 250,
+    "sha256": "abc94404ddf12f5c335c74499b97250bb797e8e4672eec47a2802d8c390838cc"
+  },
+  {
+    "path": "skynet/findings_store.py",
+    "lines": 149,
+    "sha256": "a1800ae31df853e8f0e6fcf4b420088fe4cda8c0297331b1f2554b3abdaa5075"
+  },
+  {
+    "path": "skynet/inventory.py",
+    "lines": 423,
+    "sha256": "2b5c2cd8b24b96b3ed44d53aed30fc86096be32e28c0fd13fb2dfd3874462a07"
+  },
+  {
+    "path": "skynet/llm.py",
+    "lines": 158,
+    "sha256": "9ed23aebe3d87ddbc74e379e3b45db6cb5064f51b52fdbaa10f239cc95fff591"
+  },
+  {
+    "path": "skynet/main.py",
+    "lines": 1408,
+    "sha256": "c983e92262308d046e104b6a5f64320618ee91b55ee99b440b7dba0952d74f49"
+  },
+  {
+    "path": "skynet/redact.py",
+    "lines": 77,
+    "sha256": "5a4b30e9872555d4072db599f9521a15dc7ab118d3c5760b52dfd2567be59a18"
+  },
+  {
+    "path": "skynet/report.py",
+    "lines": 305,
+    "sha256": "f14ef8add1fa0cb84a14a29fe45bd17fe45f07d86bc07fe45f860699e4eb9d2b"
+  },
+  {
+    "path": "skynet/runner.py",
+    "lines": 626,
+    "sha256": "8bb1a5db38eb53ede3c1cfa82fac2315b02f9467145a915bd02887e442a33534"
+  },
+  {
+    "path": "skynet/runs.py",
+    "lines": 284,
+    "sha256": "4bb759e6ecec5fcfc7b558219b81e47fa7b26624441b73abdfddb43fc18c9768"
+  },
+  {
+    "path": "skynet/scheduler.py",
+    "lines": 180,
+    "sha256": "253b966513104d6a2f9deacb60d11ddec4e234f8ca89c7346ab34800b71d8708"
+  },
+  {
+    "path": "skynet/scope.py",
+    "lines": 115,
+    "sha256": "bb173332284ed05ccc8d84e308e86f24cee9f2db770f49c072cbe6c9e927fa0c"
+  },
+  {
+    "path": "skynet/session_health.py",
+    "lines": 194,
+    "sha256": "3b1b8e081ce27e107126284500ae984345994b5e3967ca38403cecb6620bb251"
+  },
+  {
+    "path": "skynet/siem.py",
+    "lines": 269,
+    "sha256": "e0268145dd1a2ff4bd34b7cf475b575fb568511452a981c47bdcd4f5393b8ec8"
+  },
+  {
+    "path": "skynet/static/app.js",
+    "lines": 2215,
+    "sha256": "9cefd48d1333147a9a7bb361d1ced36b7e608b52fc91914ff6d1ebb931d0162b"
+  },
+  {
+    "path": "skynet/static/index.html",
+    "lines": 28,
+    "sha256": "10f88f79fae9e99f2e0d4b83ce5d41c3daf5af1f082bad84f2389a16a731f95c"
+  },
+  {
+    "path": "skynet/static/login.html",
+    "lines": 23,
+    "sha256": "e577567f6f0417c1862ba68e4bed8dbc32328518b800006ea29fa0f81620c43e"
+  },
+  {
+    "path": "skynet/static/login.js",
+    "lines": 18,
+    "sha256": "a04d23b06c7473fd3614b89a8c694ed68eff5f0945ff3e0eb4ae8a9950c213eb"
+  },
+  {
+    "path": "skynet/static/sky.js",
+    "lines": 539,
+    "sha256": "a9e63d2278ef5ac4be10a64b269616da399eb578661197fe4485f5be30cddfd4"
+  },
+  {
+    "path": "skynet/static/style.css",
+    "lines": 786,
+    "sha256": "21a022a4e099deac05e84bbc611b6e7a74d79651843311b62a65e79a2f56a7d0"
+  },
+  {
+    "path": "skynet/strix_bridge.py",
+    "lines": 408,
+    "sha256": "ebdcce187f17d5e1b398475ed2a0b86a8b16d77f2c00086a1862f0b30842c86c"
+  },
+  {
+    "path": "skynet/targets.py",
+    "lines": 53,
+    "sha256": "147de0b0f70499f78af348728d1e89030fd52d212220c958546531a86bd640d1"
+  },
+  {
+    "path": "skynet/telemetry.py",
+    "lines": 294,
+    "sha256": "1857c3f04eafa66e46ee0c50459325989119a157041b2436f6ffc450d968643d"
+  },
+  {
+    "path": "skynet/timeline.py",
+    "lines": 294,
+    "sha256": "fc9ffbed12f7eebd10b946e74f2f48f4f688fb7bfbb6cc9b1e0a9bf11000f0f9"
+  },
+  {
+    "path": "skynet/vault.py",
+    "lines": 442,
+    "sha256": "4947f66d11060f0f4be72503c2e647163700757e1e65d88191a757d4e3b023f9"
+  },
+  {
+    "path": "skynet/verify.py",
+    "lines": 490,
+    "sha256": "15235813de9a131019893c9731b1872c18d7f8c544357a35eed1b9c05cd0d95e"
+  },
+  {
+    "path": "skynet/workspace.py",
+    "lines": 301,
+    "sha256": "9e9626d4732d20d2fe7a8948ad34a3f68f6df0f320a474fd634129fa5e4223e2"
+  }
+]

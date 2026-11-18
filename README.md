@@ -133,10 +133,20 @@ gönderilmez. Handoff SIEM ingestion onayı değildir; `event_id` ile deduplicat
 
 ## Yönetim raporu
 
-Hedef veya kampanya sayfasındaki **Report** düğmesi bir özet açar (her rol görebilir): açık bulgular (önem
-derecesine göre), tarama başına bulgu eğilimi, açık bulguların yaşı ve düzeltme süresi, test kapsamı, en önemli 6 açık
-bulgu. Hedef raporu tek A4 sayfaya sığacak şekilde düzenlenmiştir; kampanya raporu hedef sayısı arttıkça 2. sayfaya taşar. **Download PDF** tarayıcının yazdırma penceresini açar; "PDF olarak kaydet" seçilir (A4, açık tema;
-ek Python bağımlılığı yoktur, Türkçe karakterler korunur).
+Hedef veya kampanya sayfasındaki **Report** düğmesi bir özet açar (her rol görebilir): veriye dayalı yönetici
+özeti ve öncelikli aksiyonlar, açık bulgular (önem derecesine göre), tarama başına bulgu eğilimi, açık bulguların
+yaşı ve düzeltme süresi, test kapsamı, en önemli 6 açık bulgu.
+
+- **Summary report / Detailed report:** ayrıntılı görünüm, güncel kapsam kurallarını ve tüm durumlarıyla
+  eksiksiz bulgu listesini ekler. Her bulguda hedef/host, endpoint, CWE, ilk/son görülme, analist notu ve bu
+  seçime ait görülme sayısı/kaynak taramalar bulunur. Güncel kapsam ve bulgu durumları tarihsel snapshot değildir.
+- **Download PDF:** seçilen görünümü tarayıcının yazdırma penceresine gönderir; "PDF olarak kaydet" seçilir
+  (A4, açık tema; ek Python bağımlılığı yoktur, Türkçe karakterler korunur). Ayrıntılı ek yeni sayfadan başlar;
+  raporun uzunluğu içeriğe göre değişir.
+- **Markdown:** kapsam, yönetici özeti, metrikler, kapsam kanıtı özeti ve tüm bulgu listesiyle düzenlenebilir
+  `.md` raporu indirir. API: `GET /api/targets/{id}/report?format=markdown` veya
+  `GET /api/campaigns/{id}/report?format=markdown`. Varsayılan yanıt JSON'dır; her iki biçim de aynı rol ve audit
+  kontrolünden geçer, sırlar maskelenir.
 
 Raporun başlık, hedef/kampanya metadata'sı ve hazırlayan adı dahil tüm metinleri güncel Vault değerleri ve
 saklanan tarama maskeleme verileriyle korunur. Düzeltme süresi yalnız kaydedilmiş **Fixed durumuna geçiş**
@@ -148,6 +158,9 @@ olmayan fixed kayıtlar sayılmaya devam eder, fakat süre istatistiğinden çı
   "ilk görülme → fixed işaretlenme" süresi gösterilir.
 - İptal edilen, başarısız veya yarıda kalan taramalar eğilimde "incomplete" olarak işaretlenir; düşük sayıları
   iyileşme sayılmaz. Doğrulama çalışmaları eğilime girmez. Kapsam, adı verilen tek bir tamamlanmış taramadan gelir.
+- Özet metrikler saklanan tüm seçili taramaları kapsar; grafik son 12 bitmiş değerlendirme taramasını gösterir.
+  Kampanyadan çıkarılmış hedeflerin kampanyaya ait eski taramaları hedef tablosunda da hesaba katılır.
+- Gelecekteki ilk görülme veya ters tarih sırası sıfır gün olarak gösterilmez; belirsiz süreler metrikten çıkarılır.
 - Bulgu metinleri diğer bulgu yanıtları gibi vault maskelemesinden geçer.
 
 **İlk açılış:** `~/.strix/cli-config.json` içinde OpenRouter ayarı varsa otomatik olarak şifreli bir
@@ -319,10 +332,15 @@ Kurulumdan sonra uygulama ortamında testleri çalıştırın:
 
 ```sh
 .venv/bin/python -m unittest discover -s tests -v
+node tests/test_frontend.cjs
 ```
 
 Testler geçici veri dizinleri kullanır; gerçek `data/` klasörüne dokunmaz. Native Strix testlerinin de çalışması
 için `.strix-runtime` kurulu olmalıdır; yoksa bu testler açıkça atlanır.
+
+17 Kasım uygulama kodu incelemesi: **246 Python + 2 Node testi geçti** (macOS). Log/kanıt sınırlarında maskeleme,
+resume geçmişi, kapsam portları, eksik çıktıda CI kapısı, kampanya geçmişi ve asenkron ekran yarışları düzeltildi.
+[Ayrıntılı bulgular, değişiklikler ve kalan sınırlar](docs/reviews/2026-11-17-application-code-review.md).
 
 **Son backend doğrulaması:** Red Hat UBI 9 x86_64 / Python 3.12.15 üzerinde **193 test geçti**, native Strix
 testleri atlanmadı. Gerçek Nginx HTTP/HTTPS, giriş/CSRF, IP kısıtları ve uygulama yeniden başlatma sonrası

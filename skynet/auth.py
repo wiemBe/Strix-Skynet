@@ -267,7 +267,7 @@ def valid_session(cookie: str | None) -> dict[str, Any] | None:
     if not cookie or "." not in cookie:
         return None
     payload, sig = cookie.rsplit(".", 1)
-    if not hmac.compare_digest(sig, _sign(payload.encode())):
+    if not hmac.compare_digest(sig.encode(), _sign(payload.encode()).encode()):
         return None
     try:
         data = json.loads(base64.urlsafe_b64decode(payload.encode()))
@@ -284,7 +284,7 @@ def valid_session(cookie: str | None) -> dict[str, Any] | None:
 # ---------------------------------------------------------------- CI token
 def api_token() -> str:
     st = db.get_settings()
-    tok = crypto.decrypt(st.get("api_token_enc"))
+    tok = crypto.decrypt_strict(st.get("api_token_enc"))
     if not tok:
         tok = rotate_api_token()
     return tok

@@ -265,10 +265,9 @@ def out_row(row: dict[str, Any] | None, redactor: Any = None) -> dict[str, Any]:
         text = crypto.vault_decrypt(row.get("content_enc"))
     except crypto.DecryptError:
         text = ""
-    if redactor is not None:
-        text = redactor.text(text, strict=True)
-    return {k: row.get(k) for k in ("id", "request_id", "agent_id", "agent_name", "state", "reason", "created_by",
-                                    "created_at", "accepted_at", "delivered_at", "updated_at")} | {"content": text}
+    out = {k: row.get(k) for k in ("id", "request_id", "agent_id", "agent_name", "state", "reason", "created_by",
+                                  "created_at", "accepted_at", "delivered_at", "updated_at")} | {"content": text}
+    return redactor.obj(out, strict=True) if redactor is not None else out
 
 
 def history(scan: dict[str, Any], redactor: Any, agent_id: str | None = None, limit: int = 50) -> list[dict[str, Any]]:

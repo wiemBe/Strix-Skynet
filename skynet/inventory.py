@@ -240,7 +240,7 @@ def _coverage(run_dir: Path, hmap: dict[str, str], red: Redactor, at: str | None
     return out
 
 
-def _threat_models(run_dir: Path, hmap: dict[str, str], at: str | None) -> list[dict[str, Any]]:
+def _threat_models(run_dir: Path, hmap: dict[str, str], at: str | None, red: Redactor) -> list[dict[str, Any]]:
     tm = runs._load_json(run_dir / ".state" / "threat_models.json") or {}
     out = []
     for k, v in tm.items() if isinstance(tm, dict) else []:
@@ -248,8 +248,8 @@ def _threat_models(run_dir: Path, hmap: dict[str, str], at: str | None) -> list[
         host = hmap.get(host, host)
         if not scope.valid_host(host):
             continue
-        kw = dict(source="threat_model", tier="reported", ref=f"tm:{k}"[:200], at=(v or {}).get("written_at") or at,
-                  evidence=f"Agent threat-model target: {k}")
+        kw = dict(source="threat_model", tier="reported", ref=f"tm:{k}",
+                  at=(v or {}).get("written_at") or at, evidence=red.text(f"Agent threat-model target: {k}", True))
         out.append(_obs("host", host=host, **kw))
         if port:
             out.append(_obs("service", host=host, port=port, **kw))
@@ -261,7 +261,7 @@ def extract(run_dir: Path, red: Redactor) -> list[dict[str, Any]]:
     hmap = scope.host_map(meta.get("targets_info") or [])
     at = meta.get("end_time") or meta.get("start_time")
     obs = _proxy(run_dir, hmap, red) + _findings(run_dir, hmap, red, at) + _coverage(run_dir, hmap, red, at) \
-        + _threat_models(run_dir, hmap, at)
+        + _threat_models(run_dir, hmap, at, red)
     seen, uniq = set(), []
     for o in obs:
         k = (o["kind"], o["key"], o["source"], o["ref"])

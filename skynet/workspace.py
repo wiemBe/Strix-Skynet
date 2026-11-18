@@ -210,7 +210,9 @@ def diff(gid: int, left: str, right: str, part: str = "response") -> dict[str, A
             continue
         ops.append({"op": line[0], "text": line[2:]})
     return {"available": True, "part": part, "left": left, "right": right, "ops": ops[:4000],
-            "complete": bool((a.get(part) or {}).get("complete") and (b.get(part) or {}).get("complete")),
+            "complete": bool((a.get(part) or {}).get("complete") and (b.get(part) or {}).get("complete")
+                             and not (a.get(part) or {}).get("clipped") and not (b.get(part) or {}).get("clipped")
+                             and len(ops) <= 4000),
             "note": "Computed from masked content. Differences inside masked values are not visible."}
 
 
@@ -220,7 +222,8 @@ def download_text(gid: int, run_name: str, request_id: str) -> str:
              "# Secret values known to Skynet and credential patterns are masked.", ""]
     for p in ("request", "response"):
         d = x.get(p)
-        parts += [f"## {p.upper()}" + ("" if (d or {}).get("complete") else " (incomplete or not recorded)"),
+        parts += [f"## {p.upper()}" + (" (preview clipped)" if (d or {}).get("clipped") else "")
+                  + ("" if (d or {}).get("complete") else " (incomplete or not recorded)"),
                   (d or {}).get("text") or "", ""]
     return "\n".join(parts)
 

@@ -7,7 +7,7 @@ import math
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 from fastapi import Body, FastAPI, HTTPException, Request
@@ -66,6 +66,12 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="Skynet", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
+
+@app.exception_handler(crypto.DecryptError)
+async def secret_unavailable(_: Request, __: crypto.DecryptError):
+    return JSONResponse({"detail": "Stored secret or masking context is unreadable. Restore the original encryption key "
+                                   "or repair the affected credentials before retrying."}, status_code=503)
+
 PUBLIC = {"/login", "/api/login", "/static/style.css", "/static/login.js", "/static/favicon.png", "/static/apple-touch-icon.png"}
 
 
@@ -91,7 +97,11 @@ async def security(request: Request, call_next):
     rule, ids = audit.rule_for(request.method, path)
     actor: dict[str, Any] | None = None
     if path.startswith("/api/ci/"):
-        if not auth.valid_api_token(request.headers.get("x-api-token", "")):
+        try:
+            valid = auth.valid_api_token(request.headers.get("x-api-token", ""))
+        except crypto.DecryptError as exc:
+            return await secret_unavailable(request, exc)
+        if not valid:
             return JSONResponse({"detail": "Invalid API token"}, status_code=401)
         actor = {"name": "ci-token", "role": "ci"}
     elif path not in PUBLIC:
@@ -445,7 +455,7 @@ def llm_test(body: dict[str, Any] = Body(...)) -> dict[str, Any]:
          "ca_cert_path": body.get("ca_cert_path", "")}
     if p["provider"] not in llm.PROVIDERS:
         bad("Select a provider")
-    key = body.get("api_key") or (crypto.decrypt(stored.get("api_key_enc")) if stored else "")
+    key = body.get("api_key") or (crypto.decrypt_strict(stored.get("api_key_enc")) if stored else "")
     return llm.test(p, key_override=key)
 
 
@@ -572,7 +582,11 @@ def _anchor_interval(data: dict[str, Any]) -> None:
     """Persist the first run of an interval plan so it does not drift on every restart."""
     if data.get("kind") == "interval" and not data.get("run_at"):
         from zoneinfo import ZoneInfo
-        data["run_at"] = (datetime.now(ZoneInfo(data["timezone"])) + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M")
+        try:
+            tz = ZoneInfo(data["timezone"])
+        except (KeyError, ValueError, TypeError):
+            return  # scheduler.validate returns the user-facing validation error
+        data["run_at"] = (datetime.now(tz) + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M")
 
 
 def _schedule_out(s: dict[str, Any]) -> dict[str, Any]:
@@ -817,7 +831,7 @@ def scan_message_activity(sid: int, mid: int, limit: int = 60, after: int | None
                           "The message marker was not found in the agent's recorded session (the run folder may be "
                           "missing, or Strix rebuilt the session after a crash).")
         return base
-    r = activity.read(rd, vault.scan_redactor(scan), after if after is not None else pos, row["agent_id"], limit)
+    r = activity.read(rd, vault.scan_redactor(scan), max(pos, after) if after is not None else pos, row["agent_id"], limit)
     return {**base, **r, "marker_position": pos}
 
 @app.post("/api/scans/{sid}/messages")
@@ -917,13 +931,7 @@ def scan_log(sid: int, source: str = "strix", offset: int = -1) -> dict[str, Any
     path = LOG_DIR / f"scan_{sid}.log" if source == "process" else (rd / "strix.log" if rd else None)
     if not path or not path.exists():
         return {"available": False, "text": "", "offset": 0}
-    text, off = runs.tail(path, offset)
-    # Line-align so a secret spanning the chunk boundary is never served half-masked, then strict-redact.
-    if text and not text.endswith("\n"):
-        nl = text.rfind("\n")
-        if nl != -1:
-            off -= len(text.encode("utf-8")) - len(text[:nl + 1].encode("utf-8"))
-            text = text[:nl + 1]
+    text, off = runs.tail_lines(path, offset)
     return {"available": True, "text": vault.scan_redactor(s).text(text, strict=True), "offset": off}
 
 
@@ -1042,8 +1050,9 @@ def ci_scan(tid: int, request: Request, body: dict[str, Any] = Body(default={}))
 def ci_status(sid: int) -> dict[str, Any]:
     s = _scan_or_404(sid)
     summ = s.get("summary") or {}
+    comparable = s["status"] == "completed" and summ.get("run_status") in (None, "completed")
     return {"scan_id": sid, "status": s["status"], "finished": s["status"] not in runner.ACTIVE,
-            "gate": summ.get("gate") if s["status"] == "completed" else None,
+            "gate": summ.get("gate") if comparable and summ.get("findings_available") is not False else None,
             "counts": summ.get("counts"), "run_name": s.get("run_name")}
 
 
@@ -1062,7 +1071,7 @@ def campaign_list(include_archived: int = 0) -> list[dict[str, Any]]:
 def campaign_get(cid: int) -> dict[str, Any]:
     c = _campaign_or_404(cid)
     out = campaigns.public(c, detail=True)
-    out["scans"] = [_scan_out(s) for s in db.list_scans(limit=200) if s.get("campaign_id") == cid]
+    out["scans"] = [_scan_out(s) for s in db.list_scans(campaign_id=cid, limit=200)]
     out["schedules"] = [_schedule_out(s) for s in db.q(SCHED_SELECT + " WHERE s.campaign_id=?", (cid,))]
     return out
 
@@ -1204,14 +1213,14 @@ def target_inventory(tid: int, kind: str = "", tier: str = "", scope: str = "", 
     t = _target_or_404(tid)
     assets = inventory.assets_for(t, kind=kind, tier=tier, scope_label=scope, q=q)
     latest = inventory.latest_run(tid)
-    return {"assets": assets, "summary": inventory.summary_for(tid),
-            "diff": inventory.run_diff(latest, tid) if latest else None, "latest_run": latest}
+    return vault.stored_redactor().obj({"assets": assets, "summary": inventory.summary_for(tid),
+            "diff": inventory.run_diff(latest, tid) if latest else None, "latest_run": latest}, strict=True)
 
 
 @app.get("/api/assets/{aid}/observations")
 def asset_observations(aid: int) -> dict[str, Any]:
     a = db.get("assets", aid) or bad("Asset not found", 404)
-    return {"asset": a, "observations": inventory.observations(aid)}
+    return vault.stored_redactor().obj({"asset": a, "observations": inventory.observations(aid)}, strict=True)
 
 
 # ---------------------------------------------------------------- telemetry
@@ -1222,7 +1231,7 @@ def scan_telemetry(sid: int) -> dict[str, Any]:
     if not t:
         rd = _run_dir(s)
         t = telemetry.collect(s, rd) if rd else {}
-    return {"available": bool(t and t.get("available")), "telemetry": t or {}}
+    return vault.scan_redactor(s).obj({"available": bool(t and t.get("available")), "telemetry": t or {}}, strict=True)
 
 
 # ---------------------------------------------------------------- deduplicated findings
@@ -1235,7 +1244,7 @@ def _finding_group_out(tid: int | None, scan_ids: list[int]) -> dict[str, Any]:
 @app.get("/api/targets/{tid}/findings")
 def target_findings(tid: int) -> dict[str, Any]:
     _target_or_404(tid)
-    scan_ids = [s["id"] for s in db.list_scans(target_id=tid, limit=5000)]
+    scan_ids = [s["id"] for s in db.q("SELECT id FROM scans WHERE target_id=?", (tid,))]
     return _finding_group_out(tid, scan_ids)
 
 
@@ -1245,26 +1254,30 @@ def campaign_findings(cid: int) -> dict[str, Any]:
     return _finding_group_out(None, campaigns.scan_ids(cid))
 
 
-def _report_out(request: Request, data: dict[str, Any]) -> dict[str, Any]:
+def _report_out(request: Request, data: dict[str, Any], format: str = "json") -> Any:
     u = _user(request)
     data["generated_by"] = vault.stored_redactor().text(u.get("display_name") or u["username"], strict=True)
     data["timezone"] = TIMEZONE
     audit.record(u["username"], "report.view", actor_id=u["id"], actor_role=u["role"], object_type=data["kind"],
                  object_id=data["id"], summary=data["name"], method="GET", path=request.url.path, status=200,
                  ip=_client_ip(request))
+    if format == "markdown":
+        return Response(report.markdown(data), media_type="text/markdown; charset=utf-8",
+                        headers={"Content-Disposition": f'attachment; filename="skynet-{data["kind"]}-{data["id"]}-report.md"',
+                                 "Cache-Control": "no-store"})
     return data
 
 
 @app.get("/api/targets/{tid}/report")
-def target_report(tid: int, request: Request) -> dict[str, Any]:
+def target_report(tid: int, request: Request, format: Literal["json", "markdown"] = "json") -> Any:
     _target_or_404(tid)
-    return _report_out(request, report.for_target(tid))
+    return _report_out(request, report.for_target(tid), format)
 
 
 @app.get("/api/campaigns/{cid}/report")
-def campaign_report(cid: int, request: Request) -> dict[str, Any]:
+def campaign_report(cid: int, request: Request, format: Literal["json", "markdown"] = "json") -> Any:
     _campaign_or_404(cid)
-    return _report_out(request, report.for_campaign(cid))
+    return _report_out(request, report.for_campaign(cid), format)
 
 
 @app.get("/api/findings/{gid}")
